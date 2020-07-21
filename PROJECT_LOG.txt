@@ -1,0 +1,6 @@
+2020.07.14 - gestart met experimenteren met SAME70 Xplained board en ethernet mogelijkheden, geslaagd om ethernet verbinding op te starten met voorbeeld programma
+2020.07.15 - eigen project gestart in editor en artnet proberen te ontvangen, geslaagd in artnet te ontvangen en te lezen.
+2020.07.16 - project verder gezet, programma is nu in staat om artnet te herkennen en op te slagen, volgende stap is nu de draadloze communicatie om op te stellen tussen de nodes.
+2020.07.17 - Geen geluk met draadloze communicatie op Arduino. Door monitoring van Arduino kan ik wel besluiten dat het zenden werkt. Ontvangen heb ik nog geen geluk mee. Morgen testen met oscilloscoop op wat er juist gecommuniceert wordt.
+2020.07.18 - de zender lijkt data te verzenden, de ontvanger merkt dat er op zijn frequentie data wordt verzonden maar wilt het niet oppikken. Een controle bit misschien?
+2020.07.20 - Fout gevonden in draadloze communicatie en achter extra materialen gereden. Morgen C-lib schrijven voor moederbord en netwerken uittesten.
