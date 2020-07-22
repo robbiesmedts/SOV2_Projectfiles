@@ -5,3 +5,4 @@
 2020.07.18 - de zender lijkt data te verzenden, de ontvanger merkt dat er op zijn frequentie data wordt verzonden maar wilt het niet oppikken. Een controle bit misschien?
 2020.07.20 - Fout gevonden in draadloze communicatie en achter extra materialen gereden. Morgen C-lib schrijven voor moederbord en netwerken uittesten.
 2020.07.21 - begonnen aan base arduino file voor de sensoren blokken. nog niet veel succes in de voortgang. adressen blijken moeilijker mee om te gaan dan gedacht.
+2020.07.22 - Arduino receiver software afgewerkt. Compileerbaar en DEBUG opties toegevoegd. morgen testen met simpel arduino programma
