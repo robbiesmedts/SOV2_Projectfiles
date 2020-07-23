@@ -7,15 +7,13 @@
    1) use value for actuator
    2) Send value at an interval back to motherboard
    2.5) receive sensor value from motherboard for actuator
-
-
 */
 /*
    Uncomment in need of debugging
    when in use, Arduino send every action to the Serial Com port
    set Com with a baud-rate of 115200
 */
-//#define DEBUG
+#define DEBUG
 
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -25,7 +23,8 @@
 #endif
 
 RF24 radio(9, 10); //CE, CSN
-const byte localAddr[6] = "Node1";
+const byte localAddr = 1; //node x in 
+const uint64_t listeningPipes[5]= {0x3A3A3A3AD2LL, 0x3A3A3A3AC3LL, 0x3A3A3A3AB4LL, 0x3A3A3A3AA5LL, 0x3A3A3A3A96LL};
 
 #ifdef DEBUG
 void printHex(uint8_t num){
@@ -54,10 +53,7 @@ struct dataStruct {
   int dataValue;
 } dataIn, dataOut;
 
-
-volatile byte nRF_Status;
-bool dataAvailable = 0;
-
+volatile uint8_t pipe_num; 
 int sens_pin = A0; //analog 0
 int act_pin = 5; //D5 and D6 are both connected to the Timer0 counter
 int interrupt_pin = 2;
@@ -76,7 +72,7 @@ void setup(){
      Initailisation of the nRF24L01 chip
   */
   radio.begin();
-  radio.openReadingPipe(0, localAddr);
+  radio.openReadingPipe(0, listeningPipes[localAddr]);
   radio.setPALevel(RF24_PA_MIN);
   radio.startListening();
 
@@ -87,7 +83,7 @@ void setup(){
 }
 
 void loop(){
-  
+uint16_t pipe_id;
 #ifdef DEBUG
   Serial.print("Incomming command: ");
   Serial.println(dataIn.command);
@@ -114,11 +110,9 @@ void loop(){
       dataOut.dataValue = analogRead(sens_pin);
       radio.write(&dataOut, sizeof(dataStruct));
 #ifdef DEBUG
-      Serial.print("destination address: ");
       for(int i=0; i<sizeof(dataIn.destAddr); i++){
         printHex(dataIn.destAddr[i]);
       }
-      Serial.println();
       Serial.print("data send: ");
       Serial.println(dataOut.dataValue);
 #endif
@@ -128,10 +122,9 @@ void loop(){
     case 3: //receive sensor value and use for own actuator
 #ifdef DEBUG
       Serial.print("receiving address: ");
-        for(int i=0; i<sizeof(dataIn.destAddr); i++){
-          printHex(dataIn.destAddr[i]);
-        }
-      Serial.println();
+      for(int i=0; i<sizeof(dataIn.destAddr); i++){
+        printHex(dataIn.destAddr[i]);
+      }
 #endif
       radio.openReadingPipe(1, dataIn.destAddr);//set address 2
 #ifdef DEBUG
@@ -149,7 +142,7 @@ void loop(){
 
 void nRF_IRQ(){
   noInterrupts();
-  if (radio.available())
+  if (radio.available(&pipe_num))
   {
     radio.read(&dataIn, sizeof(dataStruct));
   }
