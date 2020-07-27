@@ -18,16 +18,18 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
+#include <TimerOne.h>
+
 #ifdef DEBUG
 #include <printf.h>
 #endif
 
 RF24 radio(9, 10); //CE, CSN
-const byte localAddr = 1; //node x in 
-const uint64_t listeningPipes[5]= {0x3A3A3A3AD2LL, 0x3A3A3A3AC3LL, 0x3A3A3A3AB4LL, 0x3A3A3A3AA5LL, 0x3A3A3A3A96LL};
+const byte localAddr = 2; //node x in systeem // node 0 is masternode
+const uint64_t listeningPipes[5] = {0x3A3A3A3AD2, 0x3A3A3A3AC3, 0x3A3A3A3AB4, 0x3A3A3A3AA5, 0x3A3A3A3A96};
 
 #ifdef DEBUG
-void printHex(uint8_t num){
+void printHex(uint8_t num) {
   char hexCar[2];
 
   sprintf(hexCar, "%02X", num);
@@ -39,7 +41,7 @@ void printHex(uint8_t num){
    datapaketten verzonden binnen dit project zullen dit formaat hanteren om een uniform systeem te vormen
    command      //commando (8bits) gestuctureerd volgens command table
    destAddr     //adres (6x8bits) ontvangen met pakket, zal volgens commando een ontvangend adres worden of een adres waarnaar gezonden word
-   dataValue    //variabele (8bits) om binnenkomende/uitgaande data in op te slagen 
+   dataValue    //variabele (8bits) om binnenkomende/uitgaande data in op te slagen
 
    command table
    0 = Stop command
@@ -49,20 +51,19 @@ void printHex(uint8_t num){
 */
 struct dataStruct {
   uint8_t command;
-  byte destAddr[6];
+  uint64_t destAddr;
   int dataValue;
 } dataIn, dataOut;
 
-volatile uint8_t pipe_num; 
-int sens_pin = A0; //analog 0
+int sens_pin = A1; //analog 0
 int act_pin = 5; //D5 and D6 are both connected to the Timer0 counter
 int interrupt_pin = 2;
 
-void setup(){
+void setup() {
   pinMode(sens_pin, INPUT); //if reading a switch with no external pull-up resistor, change it to INPUT_PULLUP
   pinMode(interrupt_pin, INPUT_PULLUP);
   pinMode(act_pin, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(interrupt_pin), nRF_IRQ, LOW);
+  //attachInterrupt(digitalPinToInterrupt(interrupt_pin), nRF_IRQ, LOW);
 
 #ifdef DEBUG
   Serial.begin(115200);
@@ -82,69 +83,69 @@ void setup(){
 #endif
 }
 
-void loop(){
-uint16_t pipe_id;
+void loop() {
+  if (radio.available()){
+    radio.read(&dataIn, sizeof(dataStruct));
 #ifdef DEBUG
-  Serial.print("Incomming command: ");
-  Serial.println(dataIn.command);
+    Serial.print("Incomming command: ");
+    Serial.println(dataIn.command);
 #endif
 
-  switch (dataIn.command)
-  {
-    case 0:
-      //stop command, do nothing
-      break;
+    switch (dataIn.command){
+      case 0:
+        //stop command, do nothing
+        analogWrite(act_pin, 0);
+        break;
 
-    case 1: //read sensor and use fo own actuator
-      analogWrite(act_pin, analogRead(sens_pin));
-#ifdef DEBUG
-      Serial.println("dataIn.command = 0");
-#endif
-      delay(10);
-      break;
+      case 1: //read sensor and use fo own actuator
+        analogWrite(act_pin, analogRead(sens_pin));
+        break;
 
-    case 2: // read sensor and send to other actuator
-      radio.stopListening();
-      radio.openWritingPipe(dataIn.destAddr);//set destination address
-      dataOut.command = 2;
-      dataOut.dataValue = analogRead(sens_pin);
-      radio.write(&dataOut, sizeof(dataStruct));
+      case 2: // read sensor and send to other actuator
+        dataOut.command = 3;
+        dataOut.dataValue = analogRead(sens_pin);
+        dataOut.destAddr = listeningPipes[localAddr];
+        
+        radio.stopListening();
+        radio.openWritingPipe(dataIn.destAddr);//set destination address
+        radio.write(&dataOut, sizeof(dataStruct));
 #ifdef DEBUG
-      for(int i=0; i<sizeof(dataIn.destAddr); i++){
-        printHex(dataIn.destAddr[i]);
-      }
-      Serial.print("data send: ");
-      Serial.println(dataOut.dataValue);
+        printf("%ld", dataIn.destAddr);
+        Serial.print("\n\rdata send: ");
+        Serial.println(dataOut.dataValue);
 #endif
-      radio.startListening();
-      break;
+        //radio.openReadingPipe(0,listeningPipes[localAddr]);
+        radio.startListening();
+        break;
 
-    case 3: //receive sensor value and use for own actuator
+      case 3: //receive sensor value and use for own actuator
 #ifdef DEBUG
-      Serial.print("receiving address: ");
-      for(int i=0; i<sizeof(dataIn.destAddr); i++){
-        printHex(dataIn.destAddr[i]);
-      }
+        Serial.print("receiving address: ");
+        printf("%ld", dataIn.destAddr);
+        Serial.println();
 #endif
-      radio.openReadingPipe(1, dataIn.destAddr);//set address 2
+        radio.openReadingPipe(1, dataIn.destAddr);//set address 2
 #ifdef DEBUG
-      Serial.print("received data: ");
-      Serial.println(dataIn.dataValue);
+        Serial.print("received data: ");
+        Serial.println(dataIn.dataValue);
 #endif
-      analogWrite(act_pin, dataIn.dataValue);
-      break;
+        analogWrite(act_pin, dataIn.dataValue);
+        //radio.openReadingPipe(0,listeningPipes[localAddr]);
+        break;
 
-    default:
-      //do nothing
-      break;
+      default:
+        //do nothing
+        break;
+    }
   }
 }
-
-void nRF_IRQ(){
+/*
+void nRF_IRQ() {
   noInterrupts();
-  if (radio.available(&pipe_num))
+  Serial.println("IRQ");
+  if (radio.available())
   {
     radio.read(&dataIn, sizeof(dataStruct));
   }
   interrupts();
-}
+}*/
