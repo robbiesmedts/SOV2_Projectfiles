@@ -592,12 +592,6 @@
     <Compile Include="src\ASF\sam\drivers\usart\usart.c">
       <SubType>compile</SubType>
     </Compile>
-    <Compile Include="src\nRF24.c">
-      <SubType>compile</SubType>
-    </Compile>
-    <Compile Include="src\nRF24.h">
-      <SubType>compile</SubType>
-    </Compile>
     <Compile Include="src\nRF24L01.h">
       <SubType>compile</SubType>
     </Compile>

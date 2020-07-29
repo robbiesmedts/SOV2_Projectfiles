@@ -13,7 +13,7 @@
 
 
 //private functions
-static uint8_t spi_master_transfer(void *p_buf, uint32_t size);
-uint8_t read_register(uint8_t reg, uint8_t* buf, uint8_t len);
+//static uint8_t spi_master_transfer(void *p_buf, uint32_t size);
+//uint8_t read_register(uint8_t reg, uint8_t* buf, uint8_t len);
 
 #endif /* NRF24_H_ */

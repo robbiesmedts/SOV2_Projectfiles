@@ -8,3 +8,4 @@
 2020.07.22 - Arduino receiver software afgewerkt. Compileerbaar en DEBUG opties toegevoegd. morgen testen met simpel arduino programma
 2020.07.27 - Lang vergeten LOG aan te vullen. Arduino base en base test debugged. Base programma moet wel wat aangepast worden, er moet opgemerkt worden dat er data ontvangen is, het mag niet gevraagd worden. nRF interrupt, anders op vaste timer interrupt
 2020.07.28 - SAME70 lib voor nRF24L01 is een WIP
+2020.07.29 - verder gewerkt aan nRF24L01 lib voor SAME70. WIP, nog niet in testfase

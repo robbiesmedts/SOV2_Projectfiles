@@ -46,7 +46,7 @@
 #define CONF_BOARD_SPI
 
 /** SPI slave select MACRO definition */
-#define CONF_BOARD_SPI_NPCS0
+#define CONF_BOARD_SPI_NPCS1
 
 /** Spi Hw ID . */
 #define SPI_ID          ID_SPI0
