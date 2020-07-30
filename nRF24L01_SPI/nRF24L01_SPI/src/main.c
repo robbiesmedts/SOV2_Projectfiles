@@ -30,17 +30,12 @@
  */
 #include <asf.h>
 #include "stdio_serial.h"
+#include "string.h"
 #include "conf_board.h"
 #include "conf_clock.h"
 #include "nRF24L01.h"
 //#include "nRF24.h"
-/*
-#define CYCLES_IN_DLYTICKS_FUNC        8
-#define MS_TO_DLYTICKS(ms)          (U32)(F_CPU / 1000 * ms / CYCLES_IN_DLYTICKS_FUNC) // ((float)(F_CPU)) / 1000.0
-#define DelayTicks(ticks)            {volatile U32 n=ticks; while(n--);}//takes 8 cycles
-#define DelayMs(ms)                    DelayTicks(MS_TO_DLYTICKS(ms))//uses 20bytes
-*/
-#define _BV(n) (1 << n)
+
 
 #define CE PIO_PC9_IDX
 
@@ -53,8 +48,30 @@ typedef enum{
 	RF24_CRC_16
 }rf24_crclength_e;
 
+typedef enum {
+	RF_PA_MIN = 0,
+	RF_PA_LOW,
+	RF_PA_HIGH,
+	RF_PA_MAX,
+	RF_PA_ERROR
+	}rf24_pa_dbm_e;
+	
+static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3, RX_ADDR_P4, RX_ADDR_P5};
+static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
+static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
+static const uint8_t localAddr = 0;
+static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2, 0x3A3A3A3AC3, 0x3A3A3A3AB4, 0x3A3A3A3AA5, 0x3A3A3A3A96};
+
+struct dataStruct{
+	uint8_t command;
+	uint64_t destAddr;
+	int datavalue;
+	}dataIn, dataOut;
+
+uint32_t txDelay;
 uint8_t payload_size = 32;
 uint8_t addr_width = 5;
+uint8_t pipe0_reading_address[5];
 
 #define SPI_Handler     SPI0_Handler
 #define SPI_IRQn        SPI0_IRQn
@@ -95,7 +112,8 @@ static uint32_t gs_ul_spi_clock = 10000000;
 "-- "BOARD_NAME" --\r\n" \
 "-- Compiled: "__DATE__" "__TIME__" --"STRING_EOL
 
-uint32_t txDelay;
+void startFastWrite(const void* buf, uint8_t len, const bool multicast);
+
 
 /**
  * \brief Initialize SPI as master.
@@ -229,6 +247,21 @@ uint8_t nRF24_writeRegister(uint8_t reg, uint8_t val)
 	*/
 	return p_buf[0];
 }
+
+uint8_t nRF_writeRegister(uint8_t reg, const uint8_t* buf, uint8_t length)
+{
+	uint8_t p_buf[length+1];
+	
+	p_buf[0] = (W_REGISTER | (REGISTER_MASK & reg));
+	
+	for (uint8_t i = 1; i< length; i++)
+	{
+		p_buf[i] = (*buf++);
+	}
+	spi_master_transfer(p_buf, sizeof(p_buf));
+	
+	return p_buf[0];
+}
  
 /**
  * \brief flush the RX buffer of the nRF24L01 transceiver
@@ -269,7 +302,79 @@ uint8_t nRF24_getStatus(void)
 	spi_master_transfer(&cmd, sizeof(cmd));
 	return cmd;
 }
- 
+
+uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
+{
+	uint8_t s_buff[data_len + 1];
+	uint8_t* current = (uint8_t*) buf;
+	
+	s_buff[0] = writeType;
+	for (uint8_t i = 1; i< data_len+1; i++)
+	{
+		s_buff[i] = current[i-1];
+	}
+	
+	spi_master_transfer(s_buff, sizeof(s_buff));
+	
+	for (uint8_t i = 0; i< data_len; i++)
+	{
+		current[i] = s_buff[i+1];
+	}
+	
+	return s_buff[0];
+}
+
+void startFastWrite(const void* buf, uint8_t len, const bool multicast)
+{
+	nRF24_writePayload(buf, len, multicast ? W_TX_PAYLOAD_NO_ACK : W_TX_PAYLOAD);
+
+	ioport_set_pin_level(CE, 1);
+
+}
+
+bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
+{
+	startFastWrite(buf, len, multicast);
+	while(!(nRF24_getStatus() & ((1<<TX_DS) | (1<<MAX_RT))));
+	ioport_set_pin_level(CE, 0);
+	uint8_t status = nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<RX_DR) | (1<<MAX_RT));
+	
+	if(status & (1<<MAX_RT)){
+		nRF24_FlushTx();
+		return 0;
+	}
+	return 1;
+}
+
+void nRF24_closeReadingPipe(uint8_t pipe)
+ {
+	 nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) & ~(1<< pipe_enable_s[pipe]));
+ }
+
+uint8_t nRF24_readPayload(uint8_t* buf, uint8_t data_len)
+{
+	uint8_t s_buff[data_len+1];
+	
+	if (data_len > payload_size){
+		data_len = payload_size;
+	}
+	s_buff[0] = R_RX_PAYLOAD;
+	
+	for (uint8_t i = 1; i< data_len+1; i++)
+	{
+		s_buff[i] = 0xFF;
+	}
+	
+	spi_master_transfer(s_buff, sizeof(s_buff));
+	
+	for (uint8_t i = 0; i< data_len; i++)
+	{
+		buf[i] = s_buff[i+1];
+	}
+	
+	return s_buff[0];
+}
+
 void nRF24_setRetries(uint8_t delay, uint8_t count)
 {
 	nRF24_writeRegister(SETUP_RETR, (delay & 0xF) << ARD | (count & 0xF) <<ARC );
@@ -300,18 +405,18 @@ bool nRF24_setDataRate(uint8_t speed)
 
 void nRF24_setCRCLength(rf24_crclength_e length)
 {
-	uint8_t config = nRF24_readRegister(NRF_CONFIG) & ~(_BV(CRCO) | _BV(EN_CRC));
+	uint8_t config = nRF24_readRegister(NRF_CONFIG) & ~((1<<CRCO) | (1<<EN_CRC));
 	
 	if (length == RF24_CRC_DISABLED){
 		// do nothing we turned it off above
 	} 
 	else if (length == RF24_CRC_8){
-		config |= _BV(EN_CRC);
+		config |= (1<<EN_CRC);
 	} 
 	else
 	{
-		config |= _BV(EN_CRC);
-		config |= _BV(CRCO);
+		config |= (1<<EN_CRC);
+		config |= (1<<CRCO);
 	}
 	nRF24_writeRegister(NRF_CONFIG, config);
 }
@@ -336,11 +441,51 @@ void nRF24_powerUp(void)
 {
 	uint8_t config = nRF24_readRegister(NRF_CONFIG);
 	
-	if (!(config & _BV(PWR_UP))){
-		nRF24_writeRegister(NRF_CONFIG, config | _BV(PWR_UP));
+	if (!(config & (1<<PWR_UP))){
+		nRF24_writeRegister(NRF_CONFIG, config | (1<<PWR_UP));
 		//delay 5ms
 	}
-	//DelayMs(5);
+	delay_ms(5);
+}
+
+void nRF24_powerDown(void)
+{
+	ioport_set_pin_level(CE, 0);
+	nRF24_writeRegister(NRF_CONFIG, nRF24_readRegister(NRF_CONFIG) & ~(1<<PWR_UP));
+}
+
+void nRF24_startListening(void)
+{
+	nRF24_powerUp();
+	
+	nRF24_writeRegister(NRF_CONFIG, nRF24_readRegister(NRF_CONFIG) | (1<<PRIM_RX)); 
+	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
+	
+	ioport_set_pin_level(CE, 1);
+	
+	if (pipe0_reading_address[0] > 0){
+		nRF_writeRegister(RX_ADDR_P0, pipe0_reading_address, addr_width);
+	} else {
+		nRF24_closeReadingPipe(0);
+	}
+	
+	if (nRF24_readRegister(FEATURE) & (1<<EN_ACK_PAY)){
+		nRF24_FlushTx();
+	}
+}
+
+void nRF24_stopListening(void)
+{
+	ioport_set_pin_level(CE, 0);
+	
+	delay_us(txDelay);
+	if (nRF24_readRegister(FEATURE) & 1<<(EN_ACK_PAY))
+	{
+		delay_us(txDelay);
+		nRF24_FlushTx();
+	}
+	nRF24_writeRegister(NRF_CONFIG, (nRF24_readRegister(NRF_CONFIG)) & ~(1<<PRIM_RX));
+	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) | (1<< pipe_enable_s[0])); 
 }
 
 bool nRF24_begin(void)
@@ -357,7 +502,7 @@ bool nRF24_begin(void)
 	nRF24_setCRCLength(RF24_CRC_16);
 	toggle_features();
 	
-	nRF24_writeRegister(NRF_STATUS, _BV(RX_DR) | _BV(TX_DS) | _BV(MAX_RT));
+	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
 	nRF24_setChannel(76);
 	
@@ -366,15 +511,15 @@ bool nRF24_begin(void)
 	
 	nRF24_powerUp();
 	
-	nRF24_writeRegister(NRF_CONFIG, (nRF24_readRegister(NRF_CONFIG)) & ~_BV(PRIM_RX));
+	nRF24_writeRegister(NRF_CONFIG, (nRF24_readRegister(NRF_CONFIG)) & ~(1<<PRIM_RX));
 	
 	return (setup != 0 && setup != 0xFF);
 }
 
 void nRF24_openWritingPipe(uint64_t address)
 {
-	nRF24_writeRegister(RX_ADDR_P0, *(uint8_t *)(&address));
-	nRF24_writeRegister(TX_ADDR, *(uint8_t *)(&address));
+	nRF_writeRegister(RX_ADDR_P0, (uint8_t *)(&address), addr_width);
+	nRF_writeRegister(TX_ADDR, (uint8_t *)(&address), addr_width);
 	
 	nRF24_writeRegister(RX_PW_P0, payload_size);
 }
@@ -395,10 +540,79 @@ uint8_t nRF24_getpayloadSize(void)
 	return payload_size;
 }
 
+void nRF24_setAddressWidth(uint8_t width)
+{
+	if (width -= 2){
+		nRF24_writeRegister(SETUP_AW, width % 4);
+		addr_width = (width % 4) + 2;
+	} else {
+		nRF24_writeRegister(SETUP_AW, 0);
+		addr_width = 2;
+	}
+}
+
+void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
+{
+	if (pipe == 0){
+		memcpy(pipe0_reading_address, &address, addr_width);
+	}
+	if (pipe <= 5){
+		if (pipe < 2){
+			nRF_writeRegister(pipe_s[pipe], (uint8_t *)(&address), addr_width);
+		} else {
+			nRF_writeRegister(pipe_s[pipe], (uint8_t *)(&address), 1);
+		}
+		nRF24_writeRegister(pipe_size_s[pipe], payload_size);
+	}
+	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister((EN_RXADDR) | (1 << pipe_enable_s[pipe])));
+}
+
+bool nRF24_available( uint8_t* pipe_num)
+{
+	if (!(nRF24_readRegister(FIFO_STATUS) & (1<<RX_EMPTY)))
+	{
+		if(pipe_num)
+		{
+			uint8_t status = nRF24_getStatus();
+			*pipe_num = (status >> RX_P_NO) & 0x07;
+		}
+		return 1;
+	}
+	return 0;
+}
+
+void nRF24_setPALevel(uint8_t level)
+{
+	uint8_t setup = nRF24_readRegister(RF_SETUP) & 0xF8;
+	
+	
+	if (level > 3) {
+		level = (RF_PA_MAX << 1) + 1;
+	} else {
+		level = (level << 1) + 1;
+	}
+	nRF24_writeRegister(RF_SETUP, setup |= level);
+}
+
+uint8_t nRF24_getPALevel(void)
+{
+	return (nRF24_readRegister(RF_SETUP) & (1<<(RF_PWR_LOW) | (1<<RF_PWR_HIGH))) >> 1;
+}
+
+void nRF24_read(uint8_t* buf, uint8_t len)
+{
+	nRF24_readPayload(buf, len);
+	
+	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<MAX_RT) | (1<<TX_DS));	
+}
+
+bool nRF24_write(const void* buf, uint8_t len)
+{
+	return nRFwrite(buf, len, 0);
+}
+
 int main (void)
 {
-	uint8_t uc_key;
-
 	/* Initialize the SAM system. */
 	sysclk_init();
 	board_init();
@@ -410,10 +624,33 @@ int main (void)
 	puts(STRING_HEADER);
 	/* Insert application code here, after the board has been initialized. */
 	
-	spi_master_initialize();
+	spi_set_clock_configuration(gs_ul_spi_clock);
+	
+	nRF24_begin();
+	nRF24_openReadingPipe(1, listeningPipes[1]);
+	nRF24_openReadingPipe(2, listeningPipes[2]);
+	nRF24_openWritingPipe(listeningPipes[localAddr]);
+	nRF24_setPALevel(RF_PA_MIN);
+	nRF24_startListening();
+	
 	
 	while(1)
 	{
+		nRF24_stopListening();
+		nRF24_openWritingPipe(listeningPipes[1]);
 		
+		dataOut.command = 1;
+		dataOut.destAddr = 0;
+		dataOut.datavalue = 0;
+		
+		for (int i = 0; i< 1024; i++)
+		{
+			if(!nRF24_write(&dataOut, sizeof(dataOut)))
+			{
+				printf("transmission failed \n\r");
+			}
+			delay_ms(10);
+		}
+		delay_ms(500);
 	}
 }
