@@ -36,11 +36,9 @@
 #include "nRF24L01.h"
 //#include "nRF24.h"
 
+#define pgm_read_ptr(address_short) (void*)((uint16_t)(address_short))
 
 #define CE PIO_PC9_IDX
-
-#define RF24_1MBPS 0
-#define RF24_2MBPS 1
 
 typedef enum{
 	RF24_CRC_DISABLED = 0,
@@ -54,13 +52,51 @@ typedef enum {
 	RF_PA_HIGH,
 	RF_PA_MAX,
 	RF_PA_ERROR
-	}rf24_pa_dbm_e;
+}rf24_pa_dbm_e;
+	
+typedef enum {
+	RF24_1MBPS = 0,
+	RF24_2MBPS
+}rf24_datarate_e;
 	
 static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3, RX_ADDR_P4, RX_ADDR_P5};
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
 static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2, 0x3A3A3A3AC3, 0x3A3A3A3AB4, 0x3A3A3A3AA5, 0x3A3A3A3A96};
+
+static const char rf24_datarate_e_str_0[] = "1MBPS";
+static const char rf24_datarate_e_str_1[] = "2MBPS";
+static const char rf24_datarate_e_str_2[] = "250KBPS";
+static const char * const rf24_datarate_e_str_P[] = {
+	rf24_datarate_e_str_0,
+	rf24_datarate_e_str_1,
+	rf24_datarate_e_str_2,
+};
+static const char rf24_model_e_str_0[] = "nRF24L01";
+static const char rf24_model_e_str_1[] = "nRF24L01+";
+static const char * const rf24_model_e_str_P[] = {
+	rf24_model_e_str_0,
+	rf24_model_e_str_1,
+};
+static const char rf24_crclength_e_str_0[] = "Disabled";
+static const char rf24_crclength_e_str_1[] = "8 bits";
+static const char rf24_crclength_e_str_2[] = "16 bits" ;
+static const char * const rf24_crclength_e_str_P[] = {
+	rf24_crclength_e_str_0,
+	rf24_crclength_e_str_1,
+	rf24_crclength_e_str_2,
+};
+static const char rf24_pa_dbm_e_str_0[] = "PA_MIN";
+static const char rf24_pa_dbm_e_str_1[] = "PA_LOW";
+static const char rf24_pa_dbm_e_str_2[] = "PA_HIGH";
+static const char rf24_pa_dbm_e_str_3[] = "PA_MAX";
+static const char * const rf24_pa_dbm_e_str_P[] = {
+	rf24_pa_dbm_e_str_0,
+	rf24_pa_dbm_e_str_1,
+	rf24_pa_dbm_e_str_2,
+	rf24_pa_dbm_e_str_3,
+};
 
 struct dataStruct{
 	uint8_t command;
@@ -225,6 +261,18 @@ uint8_t nRF24_readRegister(uint8_t reg)
 	return cmd[1]; 
 }
 
+uint8_t read_register(uint8_t reg, uint8_t* buf, uint8_t len)
+{
+	uint8_t status;
+	status = R_REGISTER | (REGISTER_MASK & reg);
+	spi_master_transfer(&status, sizeof(status));
+	
+	spi_master_transfer(buf, len);
+	
+	return status;
+	
+}
+
 /**
  * \brief write to a register of the nRF24L01 transceiver
  * 
@@ -303,6 +351,127 @@ uint8_t nRF24_getStatus(void)
 	return cmd;
 }
 
+bool nRF24_setDataRate(rf24_datarate_e speed)
+{
+	bool result = false;
+	uint8_t setup = nRF24_readRegister(RF_SETUP);
+	setup &= ~((1<<RF_DR_LOW) | (1<<RF_DR_HIGH));
+	
+	if (speed == RF24_2MBPS) {
+		setup |= (1<<RF_DR_HIGH);
+		#if !defined(F_CPU)
+		txDelay = 190;
+		#else // 16Mhz Arduino
+		txDelay = 65;
+		#endif
+	}
+	nRF24_writeRegister(RF_SETUP, setup);
+	
+	if(nRF24_readRegister(RF_SETUP) == setup)
+	result = true;
+	
+	return result;
+}
+
+rf24_datarate_e getDataRate(void)
+{
+	rf24_datarate_e result;
+	uint8_t dr = nRF24_readRegister(RF_SETUP) & ((1<<RF_DR_LOW) | (1<<RF_DR_HIGH));
+	
+	if (dr == (1<<RF_DR_HIGH)) {
+		// '01' = 2MBPS
+		result = RF24_2MBPS;
+	} else {
+		// '00' = 1MBPS
+		result = RF24_1MBPS;
+	}
+	return result;
+}
+
+rf24_crclength_e getCRCLength(void)
+{
+	rf24_crclength_e result = RF24_CRC_DISABLED;
+	
+	
+	uint8_t config = nRF24_readRegister(NRF_CONFIG) & ((1<<CRCO) | (1<<EN_CRC));
+	uint8_t AA = nRF24_readRegister(EN_AA);
+	
+    if (config & (1<<EN_CRC) || AA) {
+	    if (config & (1<<CRCO)) {
+		    result = RF24_CRC_16;
+		    } else {
+		    result = RF24_CRC_8;
+	    }
+    }
+
+    return result;	
+}
+
+uint8_t nRF24_getPALevel(void)
+{
+	return (nRF24_readRegister(RF_SETUP) & (1<<(RF_PWR_LOW) | (1<<RF_PWR_HIGH))) >> 1;
+}
+
+bool isPVariant(void)
+{
+	
+	return true;
+}
+
+void print_status (uint8_t status)
+{
+	printf("STATUS\t\t = 0x%02x RX_DR=%x TX_DS=%x MAX_RT=%x RX_P_NO=%x TX_FULL=%x\r\n", status, (status & (1<<RX_DR)) ? 1 : 0, (status & (1<<TX_DS)) ? 1 : 0, (status & (1<<MAX_RT)) ? 1 : 0, (status & (1<<RX_P_NO)) ? 1 : 0, (status & (1<<TX_FULL)) ? 1 : 0);
+}
+
+void print_address_register(const char* name, uint8_t reg, uint8_t qty)
+{
+	printf("%s\t", name);
+	while(qty--){
+		uint8_t buffer[addr_width];
+		read_register(reg++, buffer, sizeof(buffer));
+		
+		printf("0x");
+		uint8_t* bufptr = buffer + sizeof(buffer);
+		while(--bufptr >= buffer){
+			printf("%02x", *bufptr);
+		}
+	}
+	printf("\r\n");
+}
+
+void print_byte_register(const char* name, uint8_t reg, uint8_t qty)
+{
+	printf("%s\t", name);
+	while (qty--)
+	{
+		printf(" 0x%02x", nRF24_readRegister(reg++));
+	}
+	printf("\r\n");
+}
+
+void printDetails(void)
+{
+	printf("SPI Speed\t = %d MHz\n",gs_ul_spi_clock/1000000);
+	print_status(nRF24_getStatus());
+	print_address_register("RX_ADDR_P0-1", RX_ADDR_P0, 2);
+	print_byte_register("RX_ADDR_P2-5", RX_ADDR_P2, 4);
+	print_byte_register("TX_ADDR\t", TX_ADDR,1);
+	
+	 print_byte_register("RX_PW_P0-6", RX_PW_P0, 6);
+	 print_byte_register("EN_AA\t", EN_AA, 1);
+	 print_byte_register("EN_RXADDR", EN_RXADDR, 1);
+	 print_byte_register("RF_CH\t", RF_CH, 1);
+	 print_byte_register("RF_SETUP", RF_SETUP, 1);
+	 print_byte_register("CONFIG\t", NRF_CONFIG, 1);
+	 print_byte_register("DYNPD/FEATURE", DYNPD, 2);
+	 
+	 printf("Data Rate\t = %s\r\n", pgm_read_ptr(&rf24_datarate_e_str_P[getDataRate()]));
+	 printf("Model\t\t = %s\r\n", pgm_read_ptr(&rf24_model_e_str_P[isPVariant()]));
+	 printf("CRC Length\t = %s\r\n", pgm_read_ptr(&rf24_crclength_e_str_P[getCRCLength()]));
+	 printf("PA Power\t = %s\r\n", pgm_read_ptr(&rf24_pa_dbm_e_str_P[nRF24_getPALevel()]));
+}
+
+/*nog na te kijken: casting van pointers*/
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
 	uint8_t s_buff[data_len + 1];
@@ -335,6 +504,7 @@ void startFastWrite(const void* buf, uint8_t len, const bool multicast)
 bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
 {
 	startFastWrite(buf, len, multicast);
+	
 	while(!(nRF24_getStatus() & ((1<<TX_DS) | (1<<MAX_RT))));
 	ioport_set_pin_level(CE, 0);
 	uint8_t status = nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<RX_DR) | (1<<MAX_RT));
@@ -378,29 +548,6 @@ uint8_t nRF24_readPayload(uint8_t* buf, uint8_t data_len)
 void nRF24_setRetries(uint8_t delay, uint8_t count)
 {
 	nRF24_writeRegister(SETUP_RETR, (delay & 0xF) << ARD | (count & 0xF) <<ARC );
-}
-
-bool nRF24_setDataRate(uint8_t speed)
-{
-	bool result = false;
-	uint8_t setup = nRF24_readRegister(RF_SETUP);
-	
-	if (speed == RF24_1MBPS)
-	{
-		setup &= setup & 0xF7;
-		txDelay = 450;
-	}
-	else
-	{
-		setup |= setup | 0x08;
-		txDelay = 190;
-	}
-	nRF24_writeRegister(RF_SETUP, setup);
-	
-	if(nRF24_readRegister(RF_SETUP) == setup)
-		result = true;
-	
-	return result;
 }
 
 void nRF24_setCRCLength(rf24_crclength_e length)
@@ -594,11 +741,6 @@ void nRF24_setPALevel(uint8_t level)
 	nRF24_writeRegister(RF_SETUP, setup |= level);
 }
 
-uint8_t nRF24_getPALevel(void)
-{
-	return (nRF24_readRegister(RF_SETUP) & (1<<(RF_PWR_LOW) | (1<<RF_PWR_HIGH))) >> 1;
-}
-
 void nRF24_read(uint8_t* buf, uint8_t len)
 {
 	nRF24_readPayload(buf, len);
@@ -633,9 +775,11 @@ int main (void)
 	nRF24_setPALevel(RF_PA_MIN);
 	nRF24_startListening();
 	
+	printDetails();
 	
 	while(1)
 	{
+/*
 		nRF24_stopListening();
 		nRF24_openWritingPipe(listeningPipes[1]);
 		
@@ -652,5 +796,7 @@ int main (void)
 			delay_ms(10);
 		}
 		delay_ms(500);
+*/
 	}
+
 }

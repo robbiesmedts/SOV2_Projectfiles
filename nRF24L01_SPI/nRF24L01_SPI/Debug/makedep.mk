@@ -4,6 +4,8 @@
 
 src\ASF\common\services\delay\sam\cycle_counter.c
 
+src\ASF\common\services\spi\sam_spi\spi_master.c
+
 src\ASF\common\utils\stdio\read.c
 
 src\ASF\sam\drivers\usart\usart.c
