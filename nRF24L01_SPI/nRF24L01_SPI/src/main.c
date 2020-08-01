@@ -33,10 +33,15 @@
 #include "string.h"
 #include "conf_board.h"
 #include "conf_clock.h"
+#include "spi_master.h"
 #include "nRF24L01.h"
 //#include "nRF24.h"
 
-#define pgm_read_ptr(address_short) (void*)((uint16_t)(address_short))
+#define DEBUG
+
+#ifdef DEBUG
+//#define pgm_read_ptr(address_short) (void*)((uint16_t)(address_short))
+#endif // DEBUG
 
 #define CE PIO_PC9_IDX
 
@@ -63,8 +68,9 @@ static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3,
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
-static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2, 0x3A3A3A3AC3, 0x3A3A3A3AB4, 0x3A3A3A3AA5, 0x3A3A3A3A96};
+const uint64_t listeningPipes[5] = {0x3A3A3A3AD2llu, 0x3A3A3A3AC3llu, 0x3A3A3A3AB4llu, 0x3A3A3A3AA5llu, 0x3A3A3A3A96llu};
 
+#ifdef DEBUG
 static const char rf24_datarate_e_str_0[] = "1MBPS";
 static const char rf24_datarate_e_str_1[] = "2MBPS";
 static const char rf24_datarate_e_str_2[] = "250KBPS";
@@ -97,6 +103,7 @@ static const char * const rf24_pa_dbm_e_str_P[] = {
 	rf24_pa_dbm_e_str_2,
 	rf24_pa_dbm_e_str_3,
 };
+#endif // DEBUG
 
 struct dataStruct{
 	uint8_t command;
@@ -113,7 +120,7 @@ uint8_t pipe0_reading_address[5];
 #define SPI_IRQn        SPI0_IRQn
 
 /* chip select */
-#define SPI_CHIP_SEL 0
+#define SPI_CHIP_SEL 1
 #define SPI_CHIP_PCS spi_get_pcs(SPI_CHIP_SEL)
 
 /*clock polarity*/
@@ -214,12 +221,19 @@ static void spi_master_transfer(void *p_buf, uint32_t size)
 	p_buffer = p_buf;
 
 	for (i = 0; i < size; i++) {
-		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
+		if (i != size-1){
+			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
+		}
+		else{
+			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 1);
+		}
+		
 		/* Wait transfer done. */
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
 		spi_read(SPI_MASTER_BASE, &data, &uc_pcs);
 		p_buffer[i] = data;
 	}
+	delay_us(5);
 }
 
 /**
@@ -418,6 +432,7 @@ bool isPVariant(void)
 	return true;
 }
 
+#ifdef DEBUG
 void print_status (uint8_t status)
 {
 	printf("STATUS\t\t = 0x%02x RX_DR=%x TX_DS=%x MAX_RT=%x RX_P_NO=%x TX_FULL=%x\r\n", status, (status & (1<<RX_DR)) ? 1 : 0, (status & (1<<TX_DS)) ? 1 : 0, (status & (1<<MAX_RT)) ? 1 : 0, (status & (1<<RX_P_NO)) ? 1 : 0, (status & (1<<TX_FULL)) ? 1 : 0);
@@ -430,7 +445,7 @@ void print_address_register(const char* name, uint8_t reg, uint8_t qty)
 		uint8_t buffer[addr_width];
 		read_register(reg++, buffer, sizeof(buffer));
 		
-		printf("0x");
+		printf(" 0x");
 		uint8_t* bufptr = buffer + sizeof(buffer);
 		while(--bufptr >= buffer){
 			printf("%02x", *bufptr);
@@ -451,13 +466,13 @@ void print_byte_register(const char* name, uint8_t reg, uint8_t qty)
 
 void printDetails(void)
 {
-	printf("SPI Speed\t = %d MHz\n",gs_ul_spi_clock/1000000);
+	printf("SPI Speed\t = %ld MHz\r\n",gs_ul_spi_clock/1000000);
 	print_status(nRF24_getStatus());
 	print_address_register("RX_ADDR_P0-1", RX_ADDR_P0, 2);
 	print_byte_register("RX_ADDR_P2-5", RX_ADDR_P2, 4);
 	print_byte_register("TX_ADDR\t", TX_ADDR,1);
 	
-	 print_byte_register("RX_PW_P0-6", RX_PW_P0, 6);
+	 print_byte_register("RX_PW_P0-5", RX_PW_P0, 6);
 	 print_byte_register("EN_AA\t", EN_AA, 1);
 	 print_byte_register("EN_RXADDR", EN_RXADDR, 1);
 	 print_byte_register("RF_CH\t", RF_CH, 1);
@@ -465,12 +480,12 @@ void printDetails(void)
 	 print_byte_register("CONFIG\t", NRF_CONFIG, 1);
 	 print_byte_register("DYNPD/FEATURE", DYNPD, 2);
 	 
-	 printf("Data Rate\t = %s\r\n", pgm_read_ptr(&rf24_datarate_e_str_P[getDataRate()]));
-	 printf("Model\t\t = %s\r\n", pgm_read_ptr(&rf24_model_e_str_P[isPVariant()]));
-	 printf("CRC Length\t = %s\r\n", pgm_read_ptr(&rf24_crclength_e_str_P[getCRCLength()]));
-	 printf("PA Power\t = %s\r\n", pgm_read_ptr(&rf24_pa_dbm_e_str_P[nRF24_getPALevel()]));
+	 printf("Data Rate\t = %s\r\n", rf24_datarate_e_str_P[getDataRate()]);
+	 printf("Model\t\t = %s\r\n", rf24_model_e_str_P[isPVariant()]);
+	 printf("CRC Length\t = %s\r\n", rf24_crclength_e_str_P[getCRCLength()]);
+	 printf("PA Power\t = %s\r\n", rf24_pa_dbm_e_str_P[nRF24_getPALevel()]);
 }
-
+#endif
 /*nog na te kijken: casting van pointers*/
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
@@ -643,7 +658,6 @@ bool nRF24_begin(void)
 	
 	nRF24_writeRegister(NRF_CONFIG, 0x0C);
 	nRF24_setRetries(5, 15);
-	setup = nRF24_readRegister(RF_SETUP);
 	
 	nRF24_setDataRate(RF24_1MBPS);
 	nRF24_setCRCLength(RF24_CRC_16);
@@ -659,6 +673,7 @@ bool nRF24_begin(void)
 	nRF24_powerUp();
 	
 	nRF24_writeRegister(NRF_CONFIG, (nRF24_readRegister(NRF_CONFIG)) & ~(1<<PRIM_RX));
+	setup = nRF24_readRegister(RF_SETUP);
 	
 	return (setup != 0 && setup != 0xFF);
 }
@@ -700,21 +715,26 @@ void nRF24_setAddressWidth(uint8_t width)
 
 void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
 {
+	//uint8_t *addr_p = (uint8_t *)&address;
+	uint8_t addr_s[sizeof(addr_width)];
+	memcpy(addr_s, &address, sizeof(addr_width));
+	
 	if (pipe == 0){
 		memcpy(pipe0_reading_address, &address, addr_width);
 	}
 	if (pipe <= 5){
 		if (pipe < 2){
-			nRF_writeRegister(pipe_s[pipe], (uint8_t *)(&address), addr_width);
+			//nRF_writeRegister(pipe_s[pipe], (const uint8_t *)&address, addr_width);
+			nRF_writeRegister(pipe_s[pipe], addr_s, addr_width);
 		} else {
-			nRF_writeRegister(pipe_s[pipe], (uint8_t *)(&address), 1);
+			nRF_writeRegister(pipe_s[pipe], addr_s, 1);
 		}
 		nRF24_writeRegister(pipe_size_s[pipe], payload_size);
 	}
 	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister((EN_RXADDR) | (1 << pipe_enable_s[pipe])));
 }
 
-bool nRF24_available( uint8_t* pipe_num)
+bool nRF24_available(uint8_t* pipe_num)
 {
 	if (!(nRF24_readRegister(FIFO_STATUS) & (1<<RX_EMPTY)))
 	{
@@ -755,6 +775,7 @@ bool nRF24_write(const void* buf, uint8_t len)
 
 int main (void)
 {
+	
 	/* Initialize the SAM system. */
 	sysclk_init();
 	board_init();
@@ -767,15 +788,17 @@ int main (void)
 	/* Insert application code here, after the board has been initialized. */
 	
 	spi_set_clock_configuration(gs_ul_spi_clock);
-	
+		
 	nRF24_begin();
 	nRF24_openReadingPipe(1, listeningPipes[1]);
 	nRF24_openReadingPipe(2, listeningPipes[2]);
 	nRF24_openWritingPipe(listeningPipes[localAddr]);
 	nRF24_setPALevel(RF_PA_MIN);
 	nRF24_startListening();
-	
+
+#ifdef DEBUG	
 	printDetails();
+#endif
 	
 	while(1)
 	{

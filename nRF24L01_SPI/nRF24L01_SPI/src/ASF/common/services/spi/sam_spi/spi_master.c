@@ -58,7 +58,7 @@
 /**
  * \brief The default chip select id.
  */
-#define DEFAULT_CHIP_ID 0
+#define DEFAULT_CHIP_ID 1
 
 /** \brief Initialize the SPI in master mode.
  *
