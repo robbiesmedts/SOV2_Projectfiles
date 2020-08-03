@@ -12,3 +12,4 @@
 2020.07.30 - nRF24L01 Lib voor SAME70 compileerd, morgen testfase starten. misschien later overwegen om originele lib aan te passen ipv eigen lib te schrijven.
 2020.07.31 - SAME70 leest niets uit van nRF chip, nagaan of het hardware of software fout is, oscilloscoop voor SPI
 2020.08.01 - lang gezocht naar een "hardware" SPI probleem. maar communicatie tussen controller en chip is nu in orde. er zijn nog wel een heel aantal problemen opgedoken i.v.m. dataconversie tussen variabelen. Adres lengte aanpassen naar 32bit/4byte voor gemakkelijkere gegevens overdracht.
+2020.08.02 - Debugging is een lang en moeizaam proces. Vele elementaire fouten zijn gevonden, maar ik ben er nog niet. Morgen een nieuwe dag

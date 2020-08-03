@@ -39,10 +39,6 @@
 
 #define DEBUG
 
-#ifdef DEBUG
-//#define pgm_read_ptr(address_short) (void*)((uint16_t)(address_short))
-#endif // DEBUG
-
 #define CE PIO_PC9_IDX
 
 typedef enum{
@@ -63,12 +59,22 @@ typedef enum {
 	RF24_1MBPS = 0,
 	RF24_2MBPS
 }rf24_datarate_e;
-	
+
+struct dataStruct{
+	uint8_t command;
+	uint32_t destAddr;
+	int datavalue;
+}dataIn, dataOut;
+
+uint32_t txDelay;
+uint8_t payload_size = 32;
 static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3, RX_ADDR_P4, RX_ADDR_P5};
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
-const uint64_t listeningPipes[5] = {0x3A3A3A3AD2llu, 0x3A3A3A3AC3llu, 0x3A3A3A3AB4llu, 0x3A3A3A3AA5llu, 0x3A3A3A3A96llu};
+static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2llu, 0x3A3A3A3AC3llu, 0x3A3A3A3AB4llu, 0x3A3A3A3AA5llu, 0x3A3A3A3A96llu};
+uint8_t addr_width = 5;
+uint8_t pipe0_reading_address[5];
 
 #ifdef DEBUG
 static const char rf24_datarate_e_str_0[] = "1MBPS";
@@ -105,17 +111,6 @@ static const char * const rf24_pa_dbm_e_str_P[] = {
 };
 #endif // DEBUG
 
-struct dataStruct{
-	uint8_t command;
-	uint64_t destAddr;
-	int datavalue;
-	}dataIn, dataOut;
-
-uint32_t txDelay;
-uint8_t payload_size = 32;
-uint8_t addr_width = 5;
-uint8_t pipe0_reading_address[5];
-
 #define SPI_Handler     SPI0_Handler
 #define SPI_IRQn        SPI0_IRQn
 
@@ -127,7 +122,7 @@ uint8_t pipe0_reading_address[5];
 #define SPI_CLK_POLARITY 0
 
 /*Clock phase*/
-#define SPI_CLK_PHASE 0
+#define SPI_CLK_PHASE 1
 
 /* Delay before SPCK. */
 #define SPI_DLYBS 0x40
@@ -148,7 +143,7 @@ uint32_t g_uc_role;
 #define BUFFER_SIZE          100
 
 /* SPI clock default setting (Hz). */
-static uint32_t gs_ul_spi_clock = 10000000;
+static uint32_t gs_ul_spi_clock = 5000000;
 
 #define STRING_EOL    "\r"
 #define STRING_HEADER "--Spi nRF24L01 Test --\r\n" \
@@ -221,12 +216,12 @@ static void spi_master_transfer(void *p_buf, uint32_t size)
 	p_buffer = p_buf;
 
 	for (i = 0; i < size; i++) {
-		if (i != size-1){
+		//if (i != size-1){
 			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
-		}
+		/*}
 		else{
 			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 1);
-		}
+		}*/
 		
 		/* Wait transfer done. */
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
@@ -300,14 +295,17 @@ uint8_t nRF24_writeRegister(uint8_t reg, uint8_t val)
 	
 	p_buf[0] = (W_REGISTER | (REGISTER_MASK & reg));
 	p_buf[1] = val;
-	
+	/** contents of p_buf before transfer
+	* [0] write commando to reg
+	* [1] data to write
+	*/
 	
 	spi_master_transfer(p_buf, sizeof(p_buf));
-	/** contents of p_buf
+	/** contents of p_buf after transfer
 	* [0] Status register
 	* [1] unknown data
 	*/
-	return p_buf[0];
+	return p_buf[0]; //return STATUS
 }
 
 uint8_t nRF_writeRegister(uint8_t reg, const uint8_t* buf, uint8_t length)
@@ -316,13 +314,23 @@ uint8_t nRF_writeRegister(uint8_t reg, const uint8_t* buf, uint8_t length)
 	
 	p_buf[0] = (W_REGISTER | (REGISTER_MASK & reg));
 	
-	for (uint8_t i = 1; i< length; i++)
+	for (uint8_t i = 1; i < sizeof(p_buf); i++)
 	{
 		p_buf[i] = (*buf++);
+		printf("%d || %02x\n\r", i, p_buf[i]);
 	}
 	spi_master_transfer(p_buf, sizeof(p_buf));
 	
+	
 	return p_buf[0];
+
+/*	uint8_t command = (W_REGISTER | (REGISTER_MASK & reg));
+	
+	spi_master_transfer(&command, sizeof(command));
+	spi_master_transfer(buf, length);
+	
+	return command;
+*/	
 }
  
 /**
@@ -369,10 +377,10 @@ bool nRF24_setDataRate(rf24_datarate_e speed)
 {
 	bool result = false;
 	uint8_t setup = nRF24_readRegister(RF_SETUP);
-	setup &= ~((1<<RF_DR_LOW) | (1<<RF_DR_HIGH));
+	setup &= ~((1<<RF_DR));
 	
 	if (speed == RF24_2MBPS) {
-		setup |= (1<<RF_DR_HIGH);
+		setup |= (1<<RF_DR);
 		#if !defined(F_CPU)
 		txDelay = 190;
 		#else // 16Mhz Arduino
@@ -470,20 +478,21 @@ void printDetails(void)
 	print_status(nRF24_getStatus());
 	print_address_register("RX_ADDR_P0-1", RX_ADDR_P0, 2);
 	print_byte_register("RX_ADDR_P2-5", RX_ADDR_P2, 4);
-	print_byte_register("TX_ADDR\t", TX_ADDR,1);
-	
-	 print_byte_register("RX_PW_P0-5", RX_PW_P0, 6);
-	 print_byte_register("EN_AA\t", EN_AA, 1);
-	 print_byte_register("EN_RXADDR", EN_RXADDR, 1);
-	 print_byte_register("RF_CH\t", RF_CH, 1);
-	 print_byte_register("RF_SETUP", RF_SETUP, 1);
-	 print_byte_register("CONFIG\t", NRF_CONFIG, 1);
-	 print_byte_register("DYNPD/FEATURE", DYNPD, 2);
+	print_address_register("TX_ADDR\t", TX_ADDR, 1);
+
+	print_byte_register("RX_PW_P0-5", RX_PW_P0, 6);
+	print_byte_register("SETUP_AW", SETUP_AW, 1);
+	print_byte_register("EN_AA\t", EN_AA, 1);
+	print_byte_register("EN_RXADDR", EN_RXADDR, 1);
+	print_byte_register("RF_CH\t", RF_CH, 1);
+	print_byte_register("RF_SETUP", RF_SETUP, 1);
+	print_byte_register("CONFIG\t", NRF_CONFIG, 1);
+	print_byte_register("DYNPD/FEATURE", DYNPD, 2);
 	 
-	 printf("Data Rate\t = %s\r\n", rf24_datarate_e_str_P[getDataRate()]);
-	 printf("Model\t\t = %s\r\n", rf24_model_e_str_P[isPVariant()]);
-	 printf("CRC Length\t = %s\r\n", rf24_crclength_e_str_P[getCRCLength()]);
-	 printf("PA Power\t = %s\r\n", rf24_pa_dbm_e_str_P[nRF24_getPALevel()]);
+	printf("Data Rate\t = %s\r\n", rf24_datarate_e_str_P[getDataRate()]);
+	printf("Model\t\t = %s\r\n", rf24_model_e_str_P[isPVariant()]);
+	printf("CRC Length\t = %s\r\n", rf24_crclength_e_str_P[getCRCLength()]);
+	printf("PA Power\t = %s\r\n", rf24_pa_dbm_e_str_P[nRF24_getPALevel()]);
 }
 #endif
 /*nog na te kijken: casting van pointers*/
@@ -560,6 +569,17 @@ uint8_t nRF24_readPayload(uint8_t* buf, uint8_t data_len)
 	return s_buff[0];
 }
 
+void nRF24_setAddressWidth(uint8_t width)
+{
+	if (width -= 2){
+		nRF24_writeRegister(SETUP_AW, width % 4);
+		addr_width = (width % 4) + 2;
+		} else {
+		nRF24_writeRegister(SETUP_AW, 0);
+		addr_width = 2;
+	}
+}
+
 void nRF24_setRetries(uint8_t delay, uint8_t count)
 {
 	nRF24_writeRegister(SETUP_RETR, (delay & 0xF) << ARD | (count & 0xF) <<ARC );
@@ -575,7 +595,7 @@ void nRF24_setCRCLength(rf24_crclength_e length)
 	else if (length == RF24_CRC_8){
 		config |= (1<<EN_CRC);
 	} 
-	else
+	else //CRC 16 bit
 	{
 		config |= (1<<EN_CRC);
 		config |= (1<<CRCO);
@@ -605,9 +625,8 @@ void nRF24_powerUp(void)
 	
 	if (!(config & (1<<PWR_UP))){
 		nRF24_writeRegister(NRF_CONFIG, config | (1<<PWR_UP));
-		//delay 5ms
+		delay_ms(5);
 	}
-	delay_ms(5);
 }
 
 void nRF24_powerDown(void)
@@ -663,9 +682,11 @@ bool nRF24_begin(void)
 	nRF24_setCRCLength(RF24_CRC_16);
 	toggle_features();
 	
+	//reset current status
 	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
 	nRF24_setChannel(76);
+	//nRF24_setAddressWidth(addr_width);
 	
 	nRF24_FlushRx();
 	nRF24_FlushTx();
@@ -678,7 +699,7 @@ bool nRF24_begin(void)
 	return (setup != 0 && setup != 0xFF);
 }
 
-void nRF24_openWritingPipe(uint64_t address)
+void nRF24_openWritingPipe(uint32_t address)
 {
 	nRF_writeRegister(RX_ADDR_P0, (uint8_t *)(&address), addr_width);
 	nRF_writeRegister(TX_ADDR, (uint8_t *)(&address), addr_width);
@@ -702,32 +723,16 @@ uint8_t nRF24_getpayloadSize(void)
 	return payload_size;
 }
 
-void nRF24_setAddressWidth(uint8_t width)
-{
-	if (width -= 2){
-		nRF24_writeRegister(SETUP_AW, width % 4);
-		addr_width = (width % 4) + 2;
-	} else {
-		nRF24_writeRegister(SETUP_AW, 0);
-		addr_width = 2;
-	}
-}
-
-void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
-{
-	//uint8_t *addr_p = (uint8_t *)&address;
-	uint8_t addr_s[sizeof(addr_width)];
-	memcpy(addr_s, &address, sizeof(addr_width));
-	
+void nRF24_openReadingPipe(uint8_t pipe, uint32_t address)
+{	
 	if (pipe == 0){
 		memcpy(pipe0_reading_address, &address, addr_width);
 	}
 	if (pipe <= 5){
 		if (pipe < 2){
-			//nRF_writeRegister(pipe_s[pipe], (const uint8_t *)&address, addr_width);
-			nRF_writeRegister(pipe_s[pipe], addr_s, addr_width);
+			nRF_writeRegister(pipe_s[pipe], (const uint8_t *) (&address), addr_width);
 		} else {
-			nRF_writeRegister(pipe_s[pipe], addr_s, 1);
+			nRF_writeRegister(pipe_s[pipe], (const uint8_t *) (&address), 1);
 		}
 		nRF24_writeRegister(pipe_size_s[pipe], payload_size);
 	}
