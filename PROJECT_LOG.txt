@@ -14,3 +14,4 @@
 2020.08.01 - lang gezocht naar een "hardware" SPI probleem. maar communicatie tussen controller en chip is nu in orde. er zijn nog wel een heel aantal problemen opgedoken i.v.m. dataconversie tussen variabelen. Adres lengte aanpassen naar 32bit/4byte voor gemakkelijkere gegevens overdracht.
 2020.08.02 - Debugging is een lang en moeizaam proces. Vele elementaire fouten zijn gevonden, maar ik ben er nog niet. Morgen een nieuwe dag
 2020.08.03 - heb de grootste fout gevonden, de zender wordt correct ingesteld. zenden bevat nog wat fouten maar dat is voor de volgende debug sessie.
+2020.08.04 - printDetails() werkt nu compleet. verzonden paketten krijgen nog steeds geen ACK. andere voeding?

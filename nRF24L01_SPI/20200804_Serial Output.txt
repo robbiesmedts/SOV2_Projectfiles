@@ -1,0 +1,23 @@
+--Spi nRF24L01 Test --
+-- SAME70-XPLD --
+-- Compiled: Aug  4 2020 20:08:00 --
+Setting SPI clock #5000000 ...
+-I- Initialize SPI as master
+SPI Speed        = 5 MHz						
+STATUS           = 0x0e RX_DR=0 TX_DS=0 MAX_RT=0 RX_P_NO=1 TX_FULL=0	// 0b00001110 - bit 3:1 111, RX FIFO Empty
+RX_ADDR_P0-1     0x3a3a3a3ad2 0x3a3a3a3ac3				// RX adres pipe 0 en pipe 1
+RX_ADDR_P2-5     0xb4 0xc4 0xc5 0xc6					// RX adres pipe 2:5
+TX_ADDR          0x3a3a3a3ad2						// TX adres
+RX_PW_P0-5       0x20 0x20 0x20 0x00 0x00 0x00				// size van RX payloads, 0b00100000, 32 bytes
+SETUP_AW         0x03							// 0b00000011 - reset waarde, 5 byte pipe adres
+EN_AA            0x3f							// 0b00111111 - reset waarde, auto acknolage op alle datapipes
+EN_RXADDR        0x01							// 0b00000001 - datapipe 0 enabled -- FOUTE CONFIGURATIE --
+RF_CH            0x4c							// 0b01001011 - frequency channel used, channel 76
+RF_SETUP         0x01							// 0b00000001 - data rate 1Mbps - RF output power -18dBm - 
+CONFIG           0x0e							// 0b00001110 - CRC enabled, 16 bit - Power up - TX 
+DYNPD/FEATURE    0x00 0x00						// 0b00000000
+Data Rate        = 1MBPS
+Model            = nRF24L01+
+CRC Length       = 16 bits
+PA Power         = PA_MIN
+transmission failed

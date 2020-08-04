@@ -37,14 +37,14 @@
 #include "nRF24L01.h"
 //#include "nRF24.h"
 
-//#define _DEBUG
+#define _DEBUG
 
 #define CE PIO_PC9_IDX
 
 struct dataStruct{
 	uint8_t command;
-	uint32_t destAddr;
-	int datavalue;
+	uint64_t destAddr;
+	uint16_t datavalue;
 }dataIn, dataOut;
 
 uint32_t txDelay;
@@ -54,7 +54,7 @@ static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
 static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2ULL, 0x3A3A3A3AC3ULL, 0x3A3A3A3AB4ULL, 0x3A3A3A3AA5ULL, 0x3A3A3A3A96ULL};
-uint8_t addr_width = 4;
+uint8_t addr_width;
 uint8_t pipe0_reading_address[5];
 
 #ifdef _DEBUG
@@ -247,13 +247,17 @@ uint8_t nRF24_readRegister(uint8_t reg)
 
 uint8_t read_register(uint8_t reg, uint8_t* buf, uint8_t len)
 {
-	uint8_t status;
-	status = R_REGISTER | (REGISTER_MASK & reg);
+	//1x spi zenden niet 2 commando's
+	uint8_t status[len+1];
+	status[0] = R_REGISTER | (REGISTER_MASK & reg);
 	spi_master_transfer(&status, sizeof(status));
 	
-	spi_master_transfer(buf, len);
+	for (uint8_t i = 0; i< len; i++)
+	{
+		buf[i] = status[i+1];
+	}
 	
-	return status;
+	return status[0];
 	
 }
 
@@ -402,7 +406,6 @@ uint8_t nRF24_getPALevel(void)
 
 bool isPVariant(void)
 {
-	
 	return true;
 }
 
@@ -461,7 +464,7 @@ void printDetails(void)
 	printf("PA Power\t = %s\r\n", rf24_pa_dbm_e_str_P[nRF24_getPALevel()]);
 }
 #endif
-/*nog na te kijken: casting van pointers*/
+
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
 	uint8_t s_buff[data_len + 1];
@@ -702,7 +705,7 @@ void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
 		}
 		nRF24_writeRegister(pipe_size_s[pipe], payload_size);
 	}
-	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister((EN_RXADDR) | (1 << pipe_enable_s[pipe])));
+	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) | (1 << pipe_enable_s[pipe]));
 }
 
 bool nRF24_available(uint8_t* pipe_num)
@@ -775,17 +778,26 @@ int main (void)
 //	{
 
 		nRF24_openWritingPipe(listeningPipes[1]);
-		
+
 		dataOut.command = 1;
-		dataOut.destAddr = 0;
+		dataOut.destAddr = listeningPipes[1];
 		dataOut.datavalue = 0;
 		
-		for (int i = 0; i< 1024; i++)
+		#ifdef _DEBUG
+			printf("commando %d send to %lld\r\n", dataOut.command, dataOut.destAddr);
+		#endif
+		
+		for (int i = 0; i< 10; i++)
 		{
 			if(!nRF24_write(&dataOut, sizeof(dataOut)))
 			{
 				printf("transmission failed \n\r");
 			}
+		#ifdef _DEBUG
+			else{
+				printf("transmission succes");
+			}
+		#endif
 			delay_ms(10);
 		}
 		delay_ms(500);
