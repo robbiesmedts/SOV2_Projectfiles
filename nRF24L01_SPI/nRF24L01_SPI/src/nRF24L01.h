@@ -113,6 +113,32 @@
 #define REUSE_TX_PL   0xE3
 #define RF24_NOP      0xFF
 
+/*data values*/
+typedef enum{
+	RF24_CRC_DISABLED = 0,
+	RF24_CRC_8,
+	RF24_CRC_16
+}rf24_crclength_e;
+
+typedef enum {
+	RF_PA_MIN = 0,
+	RF_PA_LOW,
+	RF_PA_HIGH,
+	RF_PA_MAX,
+	RF_PA_ERROR
+}rf24_pa_dbm_e;
+
+typedef enum {
+	RF24_1MBPS = 0,
+	RF24_2MBPS
+}rf24_datarate_e;
+
+enum {
+	ADDR_3bytes = 3,
+	ADDR_4bytes,
+	ADDR_5bytes
+	};
+
 /* Non-P omissions */
 #define LNA_HCURR   0
 

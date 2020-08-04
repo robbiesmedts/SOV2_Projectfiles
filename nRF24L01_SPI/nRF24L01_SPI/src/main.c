@@ -37,28 +37,9 @@
 #include "nRF24L01.h"
 //#include "nRF24.h"
 
-#define DEBUG
+//#define _DEBUG
 
 #define CE PIO_PC9_IDX
-
-typedef enum{
-	RF24_CRC_DISABLED = 0,
-	RF24_CRC_8,
-	RF24_CRC_16
-}rf24_crclength_e;
-
-typedef enum {
-	RF_PA_MIN = 0,
-	RF_PA_LOW,
-	RF_PA_HIGH,
-	RF_PA_MAX,
-	RF_PA_ERROR
-}rf24_pa_dbm_e;
-	
-typedef enum {
-	RF24_1MBPS = 0,
-	RF24_2MBPS
-}rf24_datarate_e;
 
 struct dataStruct{
 	uint8_t command;
@@ -72,11 +53,11 @@ static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3,
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
-static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2llu, 0x3A3A3A3AC3llu, 0x3A3A3A3AB4llu, 0x3A3A3A3AA5llu, 0x3A3A3A3A96llu};
-uint8_t addr_width = 5;
+static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2ULL, 0x3A3A3A3AC3ULL, 0x3A3A3A3AB4ULL, 0x3A3A3A3AA5ULL, 0x3A3A3A3A96ULL};
+uint8_t addr_width = 4;
 uint8_t pipe0_reading_address[5];
 
-#ifdef DEBUG
+#ifdef _DEBUG
 static const char rf24_datarate_e_str_0[] = "1MBPS";
 static const char rf24_datarate_e_str_1[] = "2MBPS";
 static const char rf24_datarate_e_str_2[] = "250KBPS";
@@ -109,7 +90,7 @@ static const char * const rf24_pa_dbm_e_str_P[] = {
 	rf24_pa_dbm_e_str_2,
 	rf24_pa_dbm_e_str_3,
 };
-#endif // DEBUG
+#endif // _DEBUG
 
 #define SPI_Handler     SPI0_Handler
 #define SPI_IRQn        SPI0_IRQn
@@ -125,22 +106,17 @@ static const char * const rf24_pa_dbm_e_str_P[] = {
 #define SPI_CLK_PHASE 1
 
 /* Delay before SPCK. */
-#define SPI_DLYBS 0x40
+#define SPI_DLYBS 0x10
 
 /* Delay between consecutive transfers. */
-#define SPI_DLYBCT 0x10
+#define SPI_DLYBCT 0x04
 
 /* Number of SPI clock configurations. */
 #define NUM_SPCK_CONFIGURATIONS 1
 
-uint32_t g_uc_role;
-
 /** spi mode definition*/
 #define	MASTER_MODE   0
-#define SLAVE_MODE	  1
 
-/** The buffer size for transfer  */
-#define BUFFER_SIZE          100
 
 /* SPI clock default setting (Hz). */
 static uint32_t gs_ul_spi_clock = 5000000;
@@ -158,7 +134,6 @@ void startFastWrite(const void* buf, uint8_t len, const bool multicast);
  */
 static void spi_master_initialize(void)
 {
-	g_uc_role = MASTER_MODE;
 	puts("-I- Initialize SPI as master\r");
 
 	/* Configure an SPI peripheral. */
@@ -314,23 +289,14 @@ uint8_t nRF_writeRegister(uint8_t reg, const uint8_t* buf, uint8_t length)
 	
 	p_buf[0] = (W_REGISTER | (REGISTER_MASK & reg));
 	
-	for (uint8_t i = 1; i < sizeof(p_buf); i++)
+	for (uint8_t i = 0; i < length; i++)
 	{
-		p_buf[i] = (*buf++);
-		printf("%d || %02x\n\r", i, p_buf[i]);
+		p_buf[i+1] = (*buf++);
+		//printf("%d || %02x || %02x\n\r", i, p_buf[i], *buf);
 	}
 	spi_master_transfer(p_buf, sizeof(p_buf));
 	
-	
 	return p_buf[0];
-
-/*	uint8_t command = (W_REGISTER | (REGISTER_MASK & reg));
-	
-	spi_master_transfer(&command, sizeof(command));
-	spi_master_transfer(buf, length);
-	
-	return command;
-*/	
 }
  
 /**
@@ -440,12 +406,12 @@ bool isPVariant(void)
 	return true;
 }
 
-#ifdef DEBUG
+#ifdef _DEBUG
 void print_status (uint8_t status)
 {
 	printf("STATUS\t\t = 0x%02x RX_DR=%x TX_DS=%x MAX_RT=%x RX_P_NO=%x TX_FULL=%x\r\n", status, (status & (1<<RX_DR)) ? 1 : 0, (status & (1<<TX_DS)) ? 1 : 0, (status & (1<<MAX_RT)) ? 1 : 0, (status & (1<<RX_P_NO)) ? 1 : 0, (status & (1<<TX_FULL)) ? 1 : 0);
 }
-
+//functie print verkeerde registers
 void print_address_register(const char* name, uint8_t reg, uint8_t qty)
 {
 	printf("%s\t", name);
@@ -519,7 +485,7 @@ uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writ
 
 void startFastWrite(const void* buf, uint8_t len, const bool multicast)
 {
-	nRF24_writePayload(buf, len, multicast ? W_TX_PAYLOAD_NO_ACK : W_TX_PAYLOAD);
+	nRF24_writePayload(buf, len, multicast ? W_TX_PAYLOAD_NO_ACK : W_TX_PAYLOAD); // ?: operator a ? b : c // if a, b else c
 
 	ioport_set_pin_level(CE, 1);
 
@@ -531,7 +497,7 @@ bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
 	
 	while(!(nRF24_getStatus() & ((1<<TX_DS) | (1<<MAX_RT))));
 	ioport_set_pin_level(CE, 0);
-	uint8_t status = nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<RX_DR) | (1<<MAX_RT));
+	uint8_t status = nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
 	if(status & (1<<MAX_RT)){
 		nRF24_FlushTx();
@@ -686,7 +652,7 @@ bool nRF24_begin(void)
 	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
 	nRF24_setChannel(76);
-	//nRF24_setAddressWidth(addr_width);
+	nRF24_setAddressWidth(ADDR_5bytes);
 	
 	nRF24_FlushRx();
 	nRF24_FlushTx();
@@ -699,7 +665,7 @@ bool nRF24_begin(void)
 	return (setup != 0 && setup != 0xFF);
 }
 
-void nRF24_openWritingPipe(uint32_t address)
+void nRF24_openWritingPipe(uint64_t address)
 {
 	nRF_writeRegister(RX_ADDR_P0, (uint8_t *)(&address), addr_width);
 	nRF_writeRegister(TX_ADDR, (uint8_t *)(&address), addr_width);
@@ -723,7 +689,7 @@ uint8_t nRF24_getpayloadSize(void)
 	return payload_size;
 }
 
-void nRF24_openReadingPipe(uint8_t pipe, uint32_t address)
+void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
 {	
 	if (pipe == 0){
 		memcpy(pipe0_reading_address, &address, addr_width);
@@ -799,16 +765,15 @@ int main (void)
 	nRF24_openReadingPipe(2, listeningPipes[2]);
 	nRF24_openWritingPipe(listeningPipes[localAddr]);
 	nRF24_setPALevel(RF_PA_MIN);
-	nRF24_startListening();
+	nRF24_stopListening();
 
-#ifdef DEBUG	
+#ifdef _DEBUG	
 	printDetails();
 #endif
 	
-	while(1)
-	{
-/*
-		nRF24_stopListening();
+//	while(1)
+//	{
+
 		nRF24_openWritingPipe(listeningPipes[1]);
 		
 		dataOut.command = 1;
@@ -824,7 +789,46 @@ int main (void)
 			delay_ms(10);
 		}
 		delay_ms(500);
+/*
+		nRF24_openWritingPipe(listeningPipes[2]);
+		
+		dataOut.command = 1;
+		dataOut.destAddr = 0;
+		dataOut.datavalue = 0;
+		
+		for (int i = 0; i< 1024; i++)
+		{
+			if(!nRF24_write(&dataOut, sizeof(dataOut)))
+			{
+				printf("transmission failed \n\r");
+			}
+			delay_ms(10);
+		}
+		delay_ms(500);
+		
+		nRF24_openWritingPipe(listeningPipes[1]);
+		//data packet ontvanger
+		dataOut.command = 3;
+		dataOut.destAddr = listeningPipes[2];
+		dataOut.datavalue = 0;
+		
+		if (!nRF24_write(&dataOut, sizeof(dataOut)))
+		{
+			printf("transmission failed");
+		}
+		
+		nRF24_openWritingPipe(listeningPipes[2]);
+		//data packet ontvanger
+		dataOut.command = 2;
+		dataOut.destAddr = listeningPipes[1];
+		dataOut.datavalue = 0;
+		
+		if (!nRF24_write(&dataOut, sizeof(dataOut)))
+		{
+			printf("transmission failed");
+		}
+		delay_s(5);
 */
-	}
+//	}
 
 }
