@@ -48,7 +48,7 @@ void printHex(uint8_t num) {
 struct dataStruct {
   uint8_t command;
   uint64_t destAddr;
-  int dataValue;
+  uint16_t dataValue;
 } dataIn, dataOut;
 
 volatile byte nRF_Status;
@@ -80,6 +80,7 @@ void setup() {
 #ifdef DEBUG
   //print all settings of nRF24L01
   radio.printDetails();
+  printf("data size: %d bytes\n\r", sizeof(dataStruct));
 #endif
 }
 
@@ -88,8 +89,8 @@ void loop() {
   radio.openWritingPipe(listeningPipes[1]);
 
   dataOut.command = 1;
-  dataOut.destAddr = 0;
-  dataOut.dataValue = 0;
+  dataOut.destAddr = listeningPipes[1];
+  dataOut.dataValue = 10;
 
 #ifdef DEBUG
   Serial.println("Commando 1 send to address: ");
@@ -109,8 +110,8 @@ void loop() {
 
   radio.openWritingPipe(listeningPipes[2]);
   dataOut.command = 1;
-  dataOut.destAddr = 0;
-  dataOut.dataValue = 0;
+  dataOut.destAddr = listeningPipes[2];
+  dataOut.dataValue = 11;
 
 #ifdef DEBUG
   Serial.println("Commando 1 send to address: ");

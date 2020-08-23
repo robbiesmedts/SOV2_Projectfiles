@@ -52,7 +52,7 @@ void printHex(uint8_t num) {
 struct dataStruct {
   uint8_t command;
   uint64_t destAddr;
-  int dataValue;
+  uint16_t dataValue;
 } dataIn, dataOut;
 
 int sens_pin = A1; //analog 0
@@ -94,7 +94,7 @@ void loop() {
     switch (dataIn.command){
       case 0:
         //stop command, do nothing
-        analogWrite(act_pin, 0);
+        //analogWrite(act_pin, 0);
         break;
 
       case 1: //read sensor and use fo own actuator

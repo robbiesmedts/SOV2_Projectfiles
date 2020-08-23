@@ -467,16 +467,21 @@ void printDetails(void)
 
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
-	uint8_t s_buff[data_len + 1];
-	uint8_t* current = (uint8_t*) buf;
+	uint8_t size = data_len + 1;
+	uint8_t s_buff[size];
+	const uint8_t* current = (uint8_t*) buf;
+	
+	#ifdef _DEBUG
+	printf("[Writing %u bytes] ", data_len);
+	#endif
 	
 	s_buff[0] = writeType;
-	for (uint8_t i = 1; i< data_len+1; i++)
+	for (uint8_t i = 1; i< size; i++)
 	{
 		s_buff[i] = current[i-1];
 	}
 	
-	spi_master_transfer(s_buff, sizeof(s_buff));
+	spi_master_transfer(s_buff, size);
 	
 	for (uint8_t i = 0; i< data_len; i++)
 	{
@@ -766,7 +771,7 @@ int main (void)
 	nRF24_begin();
 	nRF24_openReadingPipe(1, listeningPipes[1]);
 	nRF24_openReadingPipe(2, listeningPipes[2]);
-	nRF24_openWritingPipe(listeningPipes[localAddr]);
+	//nRF24_openWritingPipe(listeningPipes[localAddr]); overbodeige actie, zend adres moet gelijk zijn aan slave readingPipe[0]
 	nRF24_setPALevel(RF_PA_MIN);
 	nRF24_stopListening();
 
@@ -777,10 +782,10 @@ int main (void)
 //	while(1)
 //	{
 
-		nRF24_openWritingPipe(listeningPipes[1]);
+		nRF24_openWritingPipe(listeningPipes[2]);
 
 		dataOut.command = 1;
-		dataOut.destAddr = listeningPipes[1];
+		dataOut.destAddr = listeningPipes[2];
 		dataOut.datavalue = 0;
 		
 		#ifdef _DEBUG
