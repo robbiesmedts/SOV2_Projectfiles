@@ -15,3 +15,4 @@
 2020.08.02 - Debugging is een lang en moeizaam proces. Vele elementaire fouten zijn gevonden, maar ik ben er nog niet. Morgen een nieuwe dag
 2020.08.03 - heb de grootste fout gevonden, de zender wordt correct ingesteld. zenden bevat nog wat fouten maar dat is voor de volgende debug sessie.
 2020.08.04 - printDetails() werkt nu compleet. verzonden paketten krijgen nog steeds geen ACK. andere voeding?
+2020.08.30 - fout gevonden bij transmissie. pakketten moeten blijkbaar even groot zijn als de RX buffer, anders stuurt de ontvanger geen ACK

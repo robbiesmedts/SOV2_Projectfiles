@@ -42,9 +42,9 @@
 #define CE PIO_PC9_IDX
 
 struct dataStruct{
-	uint8_t command;
-	uint64_t destAddr;
+	uint32_t destAddr;
 	uint16_t datavalue;
+	uint8_t command;
 }dataIn, dataOut;
 
 uint32_t txDelay;
@@ -53,8 +53,9 @@ static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3,
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
 static const uint8_t localAddr = 0;
-static const uint64_t listeningPipes[5] = {0x3A3A3A3AD2ULL, 0x3A3A3A3AC3ULL, 0x3A3A3A3AB4ULL, 0x3A3A3A3AA5ULL, 0x3A3A3A3A96ULL};
+static const uint32_t listeningPipes[5] = {0x3A3A3AD2UL, 0x3A3A3AC3UL, 0x3A3A3AB4UL, 0x3A3A3AA5UL, 0x3A3A3A96UL};
 uint8_t addr_width;
+bool dynamic_payloads_enabled = false;
 uint8_t pipe0_reading_address[5];
 
 #ifdef _DEBUG
@@ -175,7 +176,7 @@ static void spi_set_clock_configuration(uint8_t configuration)
 /**
  * \brief Perform SPI master transfer.
  *
- * \param pbuf Pointer to buffer to transfer.
+ * \param p_buf Pointer to buffer to transfer.
  * \param size Size of the buffer.
  * 
  * \brief after function p_buf will contain the received SPI data  
@@ -191,12 +192,7 @@ static void spi_master_transfer(void *p_buf, uint32_t size)
 	p_buffer = p_buf;
 
 	for (i = 0; i < size; i++) {
-		//if (i != size-1){
-			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
-		/*}
-		else{
-			spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 1);
-		}*/
+		spi_write(SPI_MASTER_BASE, p_buffer[i], 0, 0);
 		
 		/* Wait transfer done. */
 		while ((spi_read_status(SPI_MASTER_BASE) & SPI_SR_RDRF) == 0);
@@ -467,14 +463,15 @@ void printDetails(void)
 
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
-	uint8_t size = data_len + 1;
+	uint8_t blanklen = dynamic_payloads_enabled ? 0 : payload_size - data_len;
+	uint8_t size = data_len + blanklen + 1;
 	uint8_t s_buff[size];
-	const uint8_t* current = (uint8_t*) buf;
-	
+	uint8_t* current = (uint8_t*) buf;
+/*	
 	#ifdef _DEBUG
 	printf("[Writing %u bytes] ", data_len);
 	#endif
-	
+*/	
 	s_buff[0] = writeType;
 	for (uint8_t i = 1; i< size; i++)
 	{
@@ -482,12 +479,7 @@ uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writ
 	}
 	
 	spi_master_transfer(s_buff, size);
-	
-	for (uint8_t i = 0; i< data_len; i++)
-	{
-		current[i] = s_buff[i+1];
-	}
-	
+
 	return s_buff[0];
 }
 
@@ -503,7 +495,10 @@ bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
 {
 	startFastWrite(buf, len, multicast);
 	
-	while(!(nRF24_getStatus() & ((1<<TX_DS) | (1<<MAX_RT))));
+	while(!(nRF24_getStatus() & ((1<<TX_DS) | (1<<MAX_RT))))
+	{
+		delay_us(100);
+	}
 	ioport_set_pin_level(CE, 0);
 	uint8_t status = nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
@@ -660,7 +655,7 @@ bool nRF24_begin(void)
 	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<TX_DS) | (1<<MAX_RT));
 	
 	nRF24_setChannel(76);
-	nRF24_setAddressWidth(ADDR_5bytes);
+	nRF24_setAddressWidth(ADDR_4bytes);
 	
 	nRF24_FlushRx();
 	nRF24_FlushTx();
@@ -782,70 +777,73 @@ int main (void)
 //	while(1)
 //	{
 
-		nRF24_openWritingPipe(listeningPipes[2]);
+		nRF24_openWritingPipe(listeningPipes[1]);
 
 		dataOut.command = 1;
+		
+#ifdef _DEBUG
+		printf("commando %d send to %ld\r\n", dataOut.command, listeningPipes[1]);
+#endif
+		
+		for (int i = 0; i < 10; i++)
+		{
+			if(!nRF24_write(&dataOut, sizeof(dataOut)))
+			{
+				printf("transmission failed \n\r");
+			}
+#ifdef _DEBUG
+			printf("commando %d\r\n", dataOut.command);
+#endif
+			delay_ms(10);
+		}
+
+		delay_ms(500);
+
+		nRF24_openWritingPipe(listeningPipes[2]);
+		
+		dataOut.command = 1;
+		
+#ifdef _DEBUG
+		printf("commando %d send to %ld\r\n", dataOut.command, listeningPipes[2]);
+#endif
+
+		for (int i = 0; i < 10; i++)
+		{
+			if(!nRF24_write(&dataOut, sizeof(dataOut)))
+			{
+				printf("transmission failed \n\r");
+			}
+#ifdef _DEBUG
+			printf("commando %d\r\n", dataOut.command);
+#endif
+			delay_ms(10);
+		}
+		
+		delay_s(1);
+		
+		nRF24_openWritingPipe(listeningPipes[1]);
+		//data packet zender
+		dataOut.command = 2;
 		dataOut.destAddr = listeningPipes[2];
 		dataOut.datavalue = 0;
 		
-		#ifdef _DEBUG
-			printf("commando %d send to %lld\r\n", dataOut.command, dataOut.destAddr);
-		#endif
-		
+#ifdef _DEBUG
+		printf("commando %d send to %ld\r\n", dataOut.command, listeningPipes[1]);
+#endif		
+
 		for (int i = 0; i< 10; i++)
 		{
 			if(!nRF24_write(&dataOut, sizeof(dataOut)))
 			{
 				printf("transmission failed \n\r");
 			}
-		#ifdef _DEBUG
-			else{
-				printf("transmission succes");
-			}
-		#endif
+			#ifdef _DEBUG
+			printf("commando %d\r\n", dataOut.command);
+			#endif
 			delay_ms(10);
 		}
-		delay_ms(500);
-/*
-		nRF24_openWritingPipe(listeningPipes[2]);
 		
-		dataOut.command = 1;
-		dataOut.destAddr = 0;
-		dataOut.datavalue = 0;
-		
-		for (int i = 0; i< 1024; i++)
-		{
-			if(!nRF24_write(&dataOut, sizeof(dataOut)))
-			{
-				printf("transmission failed \n\r");
-			}
-			delay_ms(10);
-		}
-		delay_ms(500);
-		
-		nRF24_openWritingPipe(listeningPipes[1]);
-		//data packet ontvanger
-		dataOut.command = 3;
-		dataOut.destAddr = listeningPipes[2];
-		dataOut.datavalue = 0;
-		
-		if (!nRF24_write(&dataOut, sizeof(dataOut)))
-		{
-			printf("transmission failed");
-		}
-		
-		nRF24_openWritingPipe(listeningPipes[2]);
-		//data packet ontvanger
-		dataOut.command = 2;
-		dataOut.destAddr = listeningPipes[1];
-		dataOut.datavalue = 0;
-		
-		if (!nRF24_write(&dataOut, sizeof(dataOut)))
-		{
-			printf("transmission failed");
-		}
-		delay_s(5);
-*/
+//		delay_s(5);
 //	}
 
 }

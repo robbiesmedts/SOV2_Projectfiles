@@ -21,7 +21,7 @@
 
 RF24 radio(9, 10); //CE, CSN
 const byte localAddr = 0; //node 0 is masternode
-const uint64_t listeningPipes[5] = {0x3A3A3A3AD2, 0x3A3A3A3AC3, 0x3A3A3A3AB4, 0x3A3A3A3AA5, 0x3A3A3A3A96};
+const uint32_t listeningPipes[5] = {0x3A3A3AD2UL, 0x3A3A3AC3UL, 0x3A3A3AB4UL, 0x3A3A3AA5UL, 0x3A3A3A96UL};
 
 
 #ifdef DEBUG
@@ -46,9 +46,9 @@ void printHex(uint8_t num) {
    3 = receive sensor value for own actuator
 */
 struct dataStruct {
-  uint8_t command;
-  uint64_t destAddr;
+  uint32_t destAddr;
   uint16_t dataValue;
+  uint8_t command;
 } dataIn, dataOut;
 
 volatile byte nRF_Status;
@@ -71,6 +71,7 @@ void setup() {
      Initailisation of the nRF24L01 chip
   */
   radio.begin();
+  radio.setAddressWidth(4);
   radio.openReadingPipe(1, listeningPipes[1]);
   radio.openReadingPipe(2, listeningPipes[2]);
   radio.openWritingPipe(listeningPipes[localAddr]);
