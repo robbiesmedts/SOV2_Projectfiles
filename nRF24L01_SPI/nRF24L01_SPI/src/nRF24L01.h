@@ -133,7 +133,7 @@ typedef enum {
 	RF24_2MBPS
 }rf24_datarate_e;
 
-enum {
+typedef enum {
 	ADDR_3bytes = 3,
 	ADDR_4bytes,
 	ADDR_5bytes

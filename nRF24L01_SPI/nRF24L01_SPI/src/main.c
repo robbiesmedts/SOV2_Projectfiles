@@ -37,26 +37,44 @@
 #include "nRF24L01.h"
 //#include "nRF24.h"
 
+/*
+Definition of the debug functions
+When disabled all the debug code will ben ignored by the compiler
+*/
 #define _DEBUG
 
-#define CE PIO_PC9_IDX
+/* Datapaket standaard.
+   datapaketten verzonden binnen dit project zullen dit formaat hanteren om een uniform systeem te vormen
+   destAddr     //adres (6x8bits) ontvangen met pakket, zal volgens commando een ontvangend adres worden of een adres waarnaar gezonden word
+   dataValue    //variabele (8bits) om binnenkomende/uitgaande data in op te slagen
+   command      //commando (8bits) gestuctureerd volgens command table
 
+   command table
+   0 = Stop command
+   1 = use sensor for own actuator
+   2 = send sensor value to other actuator
+   3 = receive sensor value for own actuator
+*/
 struct dataStruct{
 	uint32_t destAddr;
 	uint16_t datavalue;
 	uint8_t command;
 }dataIn, dataOut;
 
-uint32_t txDelay;
-uint8_t payload_size = 32;
+/*
+Globale variabele gebruikt door de software library
+*/
+uint32_t txDelay; // delay tussen TX paketten
+uint8_t payload_size = 32; // grootte van de payload
+uint8_t addr_width; // adres lengte
+bool dynamic_payloads_enabled = false;
+uint8_t pipe0_reading_address[5]; // dummy locatie voor Pipe0 adres
 static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3, RX_ADDR_P4, RX_ADDR_P5};
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};
 static const uint8_t pipe_enable_s[] = {ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5};
-static const uint8_t localAddr = 0;
-static const uint32_t listeningPipes[5] = {0x3A3A3AD2UL, 0x3A3A3AC3UL, 0x3A3A3AB4UL, 0x3A3A3AA5UL, 0x3A3A3A96UL};
-uint8_t addr_width;
-bool dynamic_payloads_enabled = false;
-uint8_t pipe0_reading_address[5];
+
+static const uint32_t listeningPipes[5] = {0x3A3A3AD2UL, 0x3A3A3AC3UL, 0x3A3A3AB4UL, 0x3A3A3AA5UL, 0x3A3A3A96UL}; //unieke adressen gebruikt door de nodes.
+static const uint8_t localAddr = 0; // lokaal adres van de node
 
 #ifdef _DEBUG
 static const char rf24_datarate_e_str_0[] = "1MBPS";
@@ -93,6 +111,11 @@ static const char * const rf24_pa_dbm_e_str_P[] = {
 };
 #endif // _DEBUG
 
+/*
+Pin definitions
+*/
+#define CE PIO_PC9_IDX
+
 #define SPI_Handler     SPI0_Handler
 #define SPI_IRQn        SPI0_IRQn
 
@@ -126,6 +149,7 @@ static uint32_t gs_ul_spi_clock = 5000000;
 #define STRING_HEADER "--Spi nRF24L01 Test --\r\n" \
 "-- "BOARD_NAME" --\r\n" \
 "-- Compiled: "__DATE__" "__TIME__" --"STRING_EOL
+/*Functie declatatie en definities*/
 
 void startFastWrite(const void* buf, uint8_t len, const bool multicast);
 
@@ -283,6 +307,14 @@ uint8_t nRF24_writeRegister(uint8_t reg, uint8_t val)
 	return p_buf[0]; //return STATUS
 }
 
+/**
+ * \brief write to a register of the nRF24L01 transceiver
+ * 
+ * \param reg register to write
+ * \param buf pointer to data
+ * \param length length of data to write
+ * \return STATUS register 
+ */
 uint8_t nRF_writeRegister(uint8_t reg, const uint8_t* buf, uint8_t length)
 {
 	uint8_t p_buf[length+1];
@@ -339,6 +371,12 @@ uint8_t nRF24_getStatus(void)
 	return cmd;
 }
 
+/**
+ * \brief sets datarate used by the nRF24
+ * 
+ * \param speed datarate to be used
+ * \return true if set
+ */
 bool nRF24_setDataRate(rf24_datarate_e speed)
 {
 	bool result = false;
@@ -361,6 +399,11 @@ bool nRF24_setDataRate(rf24_datarate_e speed)
 	return result;
 }
 
+/**
+ * \brief fetch the used datarate
+ * 
+ * \return datarate
+ */
 rf24_datarate_e getDataRate(void)
 {
 	rf24_datarate_e result;
@@ -376,6 +419,11 @@ rf24_datarate_e getDataRate(void)
 	return result;
 }
 
+/**
+ * \brief fetch the CRC length
+ * 
+ * \return CRC length
+ */
 rf24_crclength_e getCRCLength(void)
 {
 	rf24_crclength_e result = RF24_CRC_DISABLED;
@@ -395,10 +443,16 @@ rf24_crclength_e getCRCLength(void)
     return result;	
 }
 
+/**
+ * \brief fetch the PA Level
+ * 
+ * \return PA level
+ */
 uint8_t nRF24_getPALevel(void)
 {
 	return (nRF24_readRegister(RF_SETUP) & (1<<(RF_PWR_LOW) | (1<<RF_PWR_HIGH))) >> 1;
 }
+
 
 bool isPVariant(void)
 {
@@ -410,7 +464,7 @@ void print_status (uint8_t status)
 {
 	printf("STATUS\t\t = 0x%02x RX_DR=%x TX_DS=%x MAX_RT=%x RX_P_NO=%x TX_FULL=%x\r\n", status, (status & (1<<RX_DR)) ? 1 : 0, (status & (1<<TX_DS)) ? 1 : 0, (status & (1<<MAX_RT)) ? 1 : 0, (status & (1<<RX_P_NO)) ? 1 : 0, (status & (1<<TX_FULL)) ? 1 : 0);
 }
-//functie print verkeerde registers
+
 void print_address_register(const char* name, uint8_t reg, uint8_t qty)
 {
 	printf("%s\t", name);
@@ -461,6 +515,15 @@ void printDetails(void)
 }
 #endif
 
+/**
+ * \brief writes the payload to the TX buffer, adds extra blank bytes if data_len < payload_size
+ * 
+ * \param buf pointer to databuffer
+ * \param data_len length of the data to be written
+ * \param writeType type of TX packet to be send (TX /w ACK of TX zonder ACK)
+ * 
+ * \return STATUS
+ */
 uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writeType)
 {
 	uint8_t blanklen = dynamic_payloads_enabled ? 0 : payload_size - data_len;
@@ -483,14 +546,30 @@ uint8_t nRF24_writePayload(const void* buf, uint8_t data_len, const uint8_t writ
 	return s_buff[0];
 }
 
+/**
+ * \brief Initializes the payload and nRF24L01 for transmission
+ * 
+ * \param buf pointer to databuffer
+ * \param len length of the data to be written
+ * \param multicast true or false
+ * 
+ */
 void startFastWrite(const void* buf, uint8_t len, const bool multicast)
 {
 	nRF24_writePayload(buf, len, multicast ? W_TX_PAYLOAD_NO_ACK : W_TX_PAYLOAD); // ?: operator a ? b : c // if a, b else c
 
 	ioport_set_pin_level(CE, 1);
-
 }
 
+/**
+ * \brief passes payload to TX buffer and read STATUS for TX_DS
+ * 
+ * \param buf pointer to databuffer
+ * \param len length of the data to be written
+ * \param multicast true or false
+ * 
+ * \return true if TX complete
+ */
 bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
 {
 	startFastWrite(buf, len, multicast);
@@ -509,11 +588,25 @@ bool nRFwrite(const void* buf, uint8_t len, const bool multicast)
 	return 1;
 }
 
+/**
+ * \brief closes RX pipe
+ * 
+ * \param pipe RX pipe to close
+ *
+ */
 void nRF24_closeReadingPipe(uint8_t pipe)
  {
 	 nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) & ~(1<< pipe_enable_s[pipe]));
  }
 
+/**
+ * \brief Read the RX buffer payload
+ * 
+ * \param buf pointer to databuffer
+ * \param len length of the data to be read
+ * 
+ * \return STATUS
+ */
 uint8_t nRF24_readPayload(uint8_t* buf, uint8_t data_len)
 {
 	uint8_t s_buff[data_len+1];
@@ -538,6 +631,12 @@ uint8_t nRF24_readPayload(uint8_t* buf, uint8_t data_len)
 	return s_buff[0];
 }
 
+/**
+ * \brief Set address width
+ * 
+ * \param width address width
+ *
+ */
 void nRF24_setAddressWidth(uint8_t width)
 {
 	if (width -= 2){
@@ -549,11 +648,25 @@ void nRF24_setAddressWidth(uint8_t width)
 	}
 }
 
+/**
+ * \brief set the amount the transmitter re-sends TX data
+ * 
+ * \param delay delay between re transmissions
+ * \param count amount of retries permitted
+ *
+ */
 void nRF24_setRetries(uint8_t delay, uint8_t count)
 {
 	nRF24_writeRegister(SETUP_RETR, (delay & 0xF) << ARD | (count & 0xF) <<ARC );
 }
 
+/**
+ * \brief sets CRC length
+ * CRC (De)coding behind an transmission. can be disabled, 1 or 2 bytes
+ * 
+ * \param length length of the decoding
+ *
+ */
 void nRF24_setCRCLength(rf24_crclength_e length)
 {
 	uint8_t config = nRF24_readRegister(NRF_CONFIG) & ~((1<<CRCO) | (1<<EN_CRC));
@@ -572,6 +685,10 @@ void nRF24_setCRCLength(rf24_crclength_e length)
 	nRF24_writeRegister(NRF_CONFIG, config);
 }
 
+/**
+ * \brief toggels ACK features
+ *
+ */
 void toggle_features(void)
 {
 	uint8_t config[2] = {ACTIVATE, 0x73};
@@ -579,6 +696,12 @@ void toggle_features(void)
 	spi_master_transfer(config, sizeof(config));
 }
 
+/**
+ * \brief set the frequency channel used for transmission
+ * 
+ * \param channel ferquency channel used
+ *
+ */
 void nRF24_setChannel(uint8_t channel)
 {
 	const uint8_t max_channel = 125;
@@ -588,6 +711,10 @@ void nRF24_setChannel(uint8_t channel)
 		nRF24_writeRegister(RF_CH, channel);
 }
 
+/**
+ * \brief power up the internal logic of the nRF24 chip
+ * 
+ */
 void nRF24_powerUp(void)
 {
 	uint8_t config = nRF24_readRegister(NRF_CONFIG);
@@ -598,12 +725,20 @@ void nRF24_powerUp(void)
 	}
 }
 
+/**
+ * \brief Power down the internal logic of the nRF24 chip
+ *
+ */
 void nRF24_powerDown(void)
 {
 	ioport_set_pin_level(CE, 0);
 	nRF24_writeRegister(NRF_CONFIG, nRF24_readRegister(NRF_CONFIG) & ~(1<<PWR_UP));
 }
 
+/**
+ * \brief use the nRF24 module as receiver and listen for transmissions
+ *
+ */
 void nRF24_startListening(void)
 {
 	nRF24_powerUp();
@@ -624,6 +759,10 @@ void nRF24_startListening(void)
 	}
 }
 
+/**
+ * \brief use the nRF24 module as transmitter
+ *
+ */
 void nRF24_stopListening(void)
 {
 	ioport_set_pin_level(CE, 0);
@@ -638,6 +777,16 @@ void nRF24_stopListening(void)
 	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) | (1<< pipe_enable_s[0])); 
 }
 
+/**
+ * \brief configure I/O to be used by nRF24 module and configure the internal logic of the nRF24 as followed:
+ *
+ * TX retries(5, 15): delay 1,25ms (5*250us), 15 retries
+ * Data rate: 1MBPS
+ * CRC: 2 bytes
+ * RF channel: 2,476GHz (2400+76MHz)
+ * address width: 32 bit / 4 bytes
+ * 
+ */
 bool nRF24_begin(void)
 {
 	uint8_t setup = 0;
@@ -668,6 +817,13 @@ bool nRF24_begin(void)
 	return (setup != 0 && setup != 0xFF);
 }
 
+/**
+ * \brief Opens TX pipe with given address
+ * this Should be the same as the RX0 pipe of receiver
+ * 
+ * \param address address of the receiving module
+ *
+ */
 void nRF24_openWritingPipe(uint64_t address)
 {
 	nRF_writeRegister(RX_ADDR_P0, (uint8_t *)(&address), addr_width);
@@ -676,6 +832,12 @@ void nRF24_openWritingPipe(uint64_t address)
 	nRF24_writeRegister(RX_PW_P0, payload_size);
 }
 
+/**
+ * \brief sets the RX/TX buffer size 
+ * 
+ * \param size size of the RX/TX buffers
+ *
+ */
 void nRF24_setPayloadSize(uint8_t size)
 {
 	const uint8_t max_size = 32;
@@ -687,11 +849,24 @@ void nRF24_setPayloadSize(uint8_t size)
 	
 }
 
+/**
+ * \brief request the RX/TX buffer size
+ * 
+ * \return buffer size
+ *
+ */
 uint8_t nRF24_getpayloadSize(void)
 {
 	return payload_size;
 }
 
+/**
+ * \brief Opens RX pipe with given address
+ * this Should be the same as the TX pipe of transmitter
+ * 
+ * \param address address of the transmitting module
+ *
+ */
 void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
 {	
 	if (pipe == 0){
@@ -708,6 +883,13 @@ void nRF24_openReadingPipe(uint8_t pipe, uint64_t address)
 	nRF24_writeRegister(EN_RXADDR, nRF24_readRegister(EN_RXADDR) | (1 << pipe_enable_s[pipe]));
 }
 
+/**
+ * \brief Ochecks if data is available
+ * 
+ * \param pipe_num optional pointer to pipe variable. if given the pipe number is returned through this pointer
+ *
+ * \return true or false
+ */
 bool nRF24_available(uint8_t* pipe_num)
 {
 	if (!(nRF24_readRegister(FIFO_STATUS) & (1<<RX_EMPTY)))
@@ -722,6 +904,13 @@ bool nRF24_available(uint8_t* pipe_num)
 	return 0;
 }
 
+/**
+ * \brief sets PA level
+ * PA level indicates the output power of the transmitter
+ * 
+ * \param level: the desired power output (-18, -12, -6 or 0dBm )
+ *
+ */
 void nRF24_setPALevel(uint8_t level)
 {
 	uint8_t setup = nRF24_readRegister(RF_SETUP) & 0xF8;
@@ -735,6 +924,13 @@ void nRF24_setPALevel(uint8_t level)
 	nRF24_writeRegister(RF_SETUP, setup |= level);
 }
 
+/**
+ * \brief read payload and clear flags
+ * 
+ * \param buf: pointer to data buffer
+ * \param len: length of the payload to be read
+ *
+ */
 void nRF24_read(uint8_t* buf, uint8_t len)
 {
 	nRF24_readPayload(buf, len);
@@ -742,6 +938,14 @@ void nRF24_read(uint8_t* buf, uint8_t len)
 	nRF24_writeRegister(NRF_STATUS, (1<<RX_DR) | (1<<MAX_RT) | (1<<TX_DS));	
 }
 
+/**
+ * \brief write commando, starts the transmission
+ * This function should be used for transmission
+ * 
+ * \param buf: pointer to the data buffer
+ * \param len: length of the payload to be written
+ *
+ */
 bool nRF24_write(const void* buf, uint8_t len)
 {
 	return nRFwrite(buf, len, 0);
@@ -766,7 +970,7 @@ int main (void)
 	nRF24_begin();
 	nRF24_openReadingPipe(1, listeningPipes[1]);
 	nRF24_openReadingPipe(2, listeningPipes[2]);
-	//nRF24_openWritingPipe(listeningPipes[localAddr]); overbodeige actie, zend adres moet gelijk zijn aan slave readingPipe[0]
+
 	nRF24_setPALevel(RF_PA_MIN);
 	nRF24_stopListening();
 
