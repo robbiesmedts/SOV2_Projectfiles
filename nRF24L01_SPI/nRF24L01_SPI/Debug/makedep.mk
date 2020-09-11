@@ -2,6 +2,8 @@
 # Automatically-generated file. Do not edit or delete the file
 ################################################################################
 
+src\SAM_SPI.c
+
 src\ASF\common\services\delay\sam\cycle_counter.c
 
 src\ASF\common\services\spi\sam_spi\spi_master.c
@@ -9,6 +11,8 @@ src\ASF\common\services\spi\sam_spi\spi_master.c
 src\ASF\common\utils\stdio\read.c
 
 src\ASF\sam\drivers\usart\usart.c
+
+src\nRF24.c
 
 src\ASF\common\utils\stdio\write.c
 

@@ -617,6 +617,12 @@
     <Folder Include="src\config\" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="src\SAM_SPI.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\SAM_SPI.h">
+      <SubType>compile</SubType>
+    </Compile>
     <None Include="src\ASF\common\services\delay\delay.h">
       <SubType>compile</SubType>
     </None>
@@ -644,6 +650,12 @@
     <None Include="src\config\conf_spi_master.h">
       <SubType>compile</SubType>
     </None>
+    <Compile Include="src\nRF24.c">
+      <SubType>compile</SubType>
+    </Compile>
+    <Compile Include="src\nRF24.h">
+      <SubType>compile</SubType>
+    </Compile>
     <Compile Include="src\nRF24L01.h">
       <SubType>compile</SubType>
     </Compile>
