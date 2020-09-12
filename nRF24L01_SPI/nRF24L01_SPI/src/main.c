@@ -115,10 +115,7 @@ int main (void)
 #ifdef _DEBUG	
 	printDetails();
 #endif
-	
-//	while(1)
-//	{
-
+/*
 		nRF24_openWritingPipe(listeningPipes[1]);
 
 		dataOut.command = 1;
@@ -140,7 +137,7 @@ int main (void)
 		}
 
 		delay_ms(500);
-
+*/
 		nRF24_openWritingPipe(listeningPipes[2]);
 		
 		dataOut.command = 1;
@@ -149,20 +146,26 @@ int main (void)
 		printf("commando %d send to %ld\r\n", dataOut.command, listeningPipes[2]);
 #endif
 
-		for (int i = 0; i < 10; i++)
+		if(!nRF24_write(&dataOut, sizeof(dataOut)))
 		{
-			if(!nRF24_write(&dataOut, sizeof(dataOut)))
-			{
-				printf("transmission failed \n\r");
-			}
-#ifdef _DEBUG
-			printf("commando %d\r\n", dataOut.command);
-#endif
-			delay_ms(10);
+			printf("transmission failed \n\r");
 		}
+#ifdef _DEBUG
+		printf("commando %d\r\n", dataOut.command);
+#endif	
+		delay_s(10);
 		
-		delay_s(1);
+		dataOut.command = 0;
 		
+		if(!nRF24_write(&dataOut, sizeof(dataOut)))
+		{
+			printf("transmission failed \n\r");
+		}
+		#ifdef _DEBUG
+		printf("commando %d\r\n", dataOut.command);
+		#endif
+		
+/*		
 		nRF24_openWritingPipe(listeningPipes[1]);
 		//data packet zender
 		dataOut.command = 2;
@@ -184,8 +187,5 @@ int main (void)
 			#endif
 			delay_ms(10);
 		}
-		
-//		delay_s(5);
-//	}
-
+*/
 }

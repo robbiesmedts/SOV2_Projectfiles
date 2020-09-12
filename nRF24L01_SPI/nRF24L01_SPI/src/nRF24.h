@@ -39,7 +39,7 @@ typedef enum {
 	ADDR_5bytes
 }addr_width_e;
 
-extern uint8_t payload_size; // grootte van de payload
+//extern uint8_t payload_size; // grootte van de payload
 
 static const uint8_t pipe_s[] = {RX_ADDR_P0, RX_ADDR_P1, RX_ADDR_P2, RX_ADDR_P3, RX_ADDR_P4, RX_ADDR_P5};
 static const uint8_t pipe_size_s[] = {RX_PW_P0, RX_PW_P1, RX_PW_P2, RX_PW_P3, RX_PW_P4, RX_PW_P5};

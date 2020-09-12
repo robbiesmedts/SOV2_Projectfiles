@@ -14,6 +14,7 @@
    set Com with a baud-rate of 115200
 */
 #define DEBUG
+#define CONTINIOUS
 
 #include <SPI.h>
 #include <nRF24L01.h>
@@ -56,7 +57,6 @@ void setup() {
   pinMode(sens_pin, INPUT); //if reading a switch with no external pull-up resistor, change it to INPUT_PULLUP
   pinMode(interrupt_pin, INPUT_PULLUP);
   pinMode(act_pin, OUTPUT);
-  //if(interrupt)
   attachInterrupt(digitalPinToInterrupt(interrupt_pin), nRF_IRQ, LOW);
 
 #ifdef DEBUG
@@ -79,21 +79,31 @@ void setup() {
 }
 
 void loop() {
-  uint8_t currentCommand = 0;
-  uint16_t currentValue = 0;
-  uint32_t currentDestAddr
+  uint8_t currentCommand;
+  uint16_t currentValue;
+  uint32_t currentDestAddr;
   
-//if (Interrupt)
-  if(radio.available() && b_rx_ready){
+  /* uitvoering op interrupt basis
+   * commando wordt opgeslagen
+   * en uitgevoerd tot een ander commando verzonden wordt 
+  */
+#ifdef CONTINIOUS
+  if(b_rx_ready){
     b_rx_ready = 0;
     radio.read(&dataIn, sizeof(dataIn));
+
     currentCommand = dataIn.command;
     currentValue = dataIn.dataValue;
     currentDestAddr = dataIn.destAddr;
-  }
+#ifdef DEBUG
+      Serial.println("IRQ geweest");
+      printf("Current command: %d\n\r", currentCommand);
+#endif
+  }//end fetch command
+  
   switch (currentCommand){
     case 0:
-      //stop command, do nothing
+      //stop command, hold last value
       //analogWrite(act_pin, 0);
       break;
 
@@ -132,9 +142,18 @@ void loop() {
     default:
       //do nothing
       break;
-  }
-/*  
-  if (radio.available()){  
+    /* delay om uitvoering te vertragen
+     * uitvoering wordt vertraagd met X ms 
+     * precieze berekening is onbekend, maar 1/x is close enough
+     */
+    delay(4);
+  }// end switch
+#endif
+
+/* verloop uitvoering als er commando binnen komt */
+#ifndef CONTINIOUS
+  if(b_rx_ready){
+    b_rx_ready = 0; 
     radio.read(&dataIn, sizeof(dataIn));
 #ifdef DEBUG
     Serial.print("Incomming command: ");
@@ -182,18 +201,13 @@ void loop() {
       default:
         //do nothing
         break;
-    }
-  }
-*/
-}
-// if (Interrupt)
+    }//end switch
+  }//end non-interrupt
+#endif  
+} //end loop
+
 void nRF_IRQ() {
   noInterrupts();
-
-#ifdef DEBUG
-  Serial.println("IRQ");
-#endif
-
   radio.whatHappened(b_tx_ok, b_tx_fail, b_rx_ready);
   interrupts();
 }
