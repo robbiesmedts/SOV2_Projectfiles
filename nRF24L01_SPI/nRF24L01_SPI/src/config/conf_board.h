@@ -53,6 +53,6 @@
 
 /** SPI base address for SPI master mode*/
 #define SPI_MASTER_BASE      SPI0
-/** SPI base address for SPI slave mode, (on different board) */
+
 
 #endif /* CONF_BOARD_H */

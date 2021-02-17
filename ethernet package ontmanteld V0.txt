@@ -54,7 +54,7 @@ package 38: 2
 package 39: 26
 package 40: 178
 package 41: 183
--- Art-Net Header --
+-- Art-Net Header -- ArtDmx
 package 42: 65 - A
 package 43: 114 - r
 package 44: 116 - t

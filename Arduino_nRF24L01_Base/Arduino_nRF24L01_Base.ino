@@ -14,18 +14,17 @@
    set Com with a baud-rate of 115200
 */
 #define DEBUG
-#define CONTINIOUS
+//#define CONTINIOUS
 
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
-#include <TimerOne.h>
 
 #ifdef DEBUG
 #include <printf.h>
 #endif
 
-RF24 radio(9, 10); //CE, CSN
+RF24 radio(7, 6); //CE, CSN
 const byte localAddr = 2; //node x in systeem // node 0 is masternode
 const uint32_t listeningPipes[5] = {0x3A3A3AD2UL, 0x3A3A3AC3UL, 0x3A3A3AB4UL, 0x3A3A3AA5UL, 0x3A3A3A96UL};
 bool b_tx_ok, b_tx_fail, b_rx_ready = 0;
@@ -68,7 +67,8 @@ void setup() {
   */
   radio.begin();
   radio.setAddressWidth(4);
-  radio.openReadingPipe(0, listeningPipes[localAddr]);
+  for (uint8_t i = 0; i < 3; i++)
+  radio.openReadingPipe(i, listeningPipes[localAddr] + i);
   radio.setPALevel(RF24_PA_MIN);
   radio.startListening();
 
@@ -158,6 +158,10 @@ void loop() {
 #ifdef DEBUG
     Serial.print("Incomming command: ");
     Serial.println(dataIn.command);
+    Serial.print("Incomming Data:");
+    Serial.println(dataIn.dataValue);
+    Serial.print("Incomming Destination:");
+    Serial.println(dataIn.destAddr);
 #endif
 
     switch (dataIn.command){
